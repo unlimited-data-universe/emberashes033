@@ -34,6 +34,10 @@ import { buildDecorOverlay, hexDef, type DecorOverlay } from "./hexprops";
 import { ACTION_HUNGER_COST, drainHunger, fullness } from "./hunger";
 import { HUNGER_PENALTY_MAX } from "./overworld";
 import { sfxPlay } from "./audio";
+// Shadows the DOM global of the same name: the WebGL2DRenderer used for the battle canvas
+// (see BattleCanvas.tsx) implements this instead of a real Path2D, and every `new Path2D()`
+// below (the blade-sweep crescent) needs to build one it understands.
+import { Path2D } from "./gfx/WebGL2DRenderer";
 import type {
   Bag,
   BattleSnapshot,
@@ -6235,7 +6239,7 @@ export class BattleEngine {
   }
 
   /** Editor-only overlay: show the footprint of the decoration brush in the live preview. */
-  drawDecorationHighlight(ctx: CanvasRenderingContext2D, decorationId: string, selected?: { x: number; y: number; rot?: number }): void {
+  drawDecorationHighlight(ctx: any, decorationId: string, selected?: { x: number; y: number; rot?: number }): void {
     const tile = this.layout.tile;
     ctx.save();
     ctx.lineWidth = Math.max(2, tile * 0.075);
@@ -6386,7 +6390,7 @@ export class BattleEngine {
     }
   }
 
-  private hexPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+  private hexPath(ctx: any, cx: number, cy: number, size: number): void {
     ctx.beginPath();
     for (let i = 0; i < 6; i++) {
       const a = (Math.PI / 180) * (60 * i - 30);
@@ -6413,7 +6417,7 @@ export class BattleEngine {
   /** Multi-hex terrain props draw as one image over their whole footprint's bounding box,
    * not hex-clipped like regular tiles — they don't need to fill the exact hex shape. */
   private drawDecorations(
-    ctx: CanvasRenderingContext2D,
+    ctx: any,
     tile: number,
     cssW: number,
     cssH: number,
@@ -6751,7 +6755,7 @@ export class BattleEngine {
 
   /** Persistent visual-code status FX: it tracks a unit, loops with engine time,
    * and needs no image, texture, or background. */
-  private drawStatusFx(ctx: CanvasRenderingContext2D, u: Unit, w: number, h: number): void {
+  private drawStatusFx(ctx: any, u: Unit, w: number, h: number): void {
     if (!u.poisoned && !u.diseased) return;
 
     const layer = (poison: boolean) => {
@@ -7908,7 +7912,7 @@ export class BattleEngine {
     return { core: "255,250,235", mid: "255,248,224" }; // potionZero
   }
 
-  private drawHolyFx(ctx: CanvasRenderingContext2D, tile: number): void {
+  private drawHolyFx(ctx: any, tile: number): void {
     if (!this.holyFxLive) return;
     for (const fx of this.holyFx) {
       if (!fx.live) continue;
@@ -7935,7 +7939,7 @@ export class BattleEngine {
    * familiar visibly steps out of it as its own fade-in ramps up (see castSummonFamiliar /
    * the `else if (u.alive && u.fade < 1)` tick branch) instead of just popping in next to an
    * unrelated puff of particles. */
-  private drawPortalFx(ctx: CanvasRenderingContext2D, tile: number): void {
+  private drawPortalFx(ctx: any, tile: number): void {
     if (!this.portalFxLive) return;
     const ease = (x: number) => 1 - (1 - Math.min(1, Math.max(0, x))) ** 3;
     for (const p of this.portalFx) {
@@ -8011,7 +8015,7 @@ export class BattleEngine {
   /** The shared steel-swoosh visual — see BladeFx/BladeKind. Every shape here is plain
    * white-steel light (glow pass + bright core pass), the same treatment a real blade catches
    * the light with, and never fire or a magic-circle glow. */
-  private drawBladeFx(ctx: CanvasRenderingContext2D, tile: number): void {
+  private drawBladeFx(ctx: any, tile: number): void {
     if (!this.bladeFxLive) return;
     for (const b of this.bladeFx) {
       if (!b.live) continue;
@@ -8229,7 +8233,7 @@ export class BattleEngine {
   }
 
   private drawDivineLight(
-    ctx: CanvasRenderingContext2D,
+    ctx: any,
     cx: number,
     cy: number,
     tile: number,
@@ -8325,7 +8329,7 @@ export class BattleEngine {
   }
 
   private drawPotionBurst(
-    ctx: CanvasRenderingContext2D,
+    ctx: any,
     cx: number,
     cy: number,
     tile: number,
