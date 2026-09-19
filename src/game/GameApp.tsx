@@ -3979,13 +3979,18 @@ function MapEditorScreen({
   // search in a dropdown. pt-BR collation so accents and case sort where a reader expects.
   const classOptions = (Object.keys(CLASSES) as ClassId[]).sort((a, b) => byName(CLASSES[a].name, CLASSES[b].name));
   const summonOptions = [...SUMMON_CLASSES].sort((a, b) => byName(CLASSES[a].name, CLASSES[b].name));
-  // A hero-identity classId (aldric, kaelFinal, conjurer, ...) deliberately keeps the same
-  // display name/role as the generic job it's a re-skin of (Aldric's own class is still
-  // named "Lanceiro", same as the plain Lancer enemy) — so any picker that just prints
-  // CLASSES[c].name is unfindable/ambiguous for that classId specifically. This map lets
-  // such a picker suffix the hero's own name onto their own classId's label only, leaving
-  // every generic classId's label untouched.
-  const heroNameByClassId: Partial<Record<ClassId, string>> = Object.fromEntries(EDITOR_HEROES.map((h) => [h.classId, h.name]));
+  // A named-individual classId (aldric, kaelFinal, conjurer, sandoval, ...) deliberately
+  // keeps the same display name/role as the generic job it's a re-skin of (Aldric's own
+  // class is still named "Lanceiro", same as the plain Lancer enemy; Sandoval's is
+  // "Lanceiro · Lanceiro rival · Chefe") — so any picker that just prints CLASSES[c].name is
+  // unfindable/ambiguous for that classId specifically. This map lets such a picker show
+  // that individual's own name for their own classId only, leaving every generic classId's
+  // label untouched. Covers every recruitable hero (EDITOR_HEROES) plus named non-recruit
+  // individuals who have their own classId/sprite but aren't a playable party option.
+  const NAMED_NON_HERO_CLASS_IDS: { name: string; classId: ClassId }[] = [{ name: "Sandoval", classId: "sandoval" }];
+  const heroNameByClassId: Partial<Record<ClassId, string>> = Object.fromEntries(
+    [...EDITOR_HEROES, ...NAMED_NON_HERO_CLASS_IDS].map((h) => [h.classId, h.name]),
+  );
   // One entry per distinct sprite (several classes share art — a promoted class, an
   // alternate skin), labeled by whichever class name reaches it first. Named heroes go
   // first so each of them claims their own sprite's slot under their own name — the
@@ -4470,7 +4475,7 @@ function MapEditorScreen({
               </Button>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {BUILDER_TERRAIN.map((t) => (
+              {[...BUILDER_TERRAIN].sort((a, b) => byName(TERRAIN[a].name, TERRAIN[b].name)).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -4491,7 +4496,12 @@ function MapEditorScreen({
                 <span className="mt-1 text-muted uppercase tracking-wide">Versões</span>
                 <div className="h-28 min-h-[104px] min-w-0 flex-1 ember-scrollbar overflow-x-auto overflow-y-hidden rounded-md border border-border bg-bg/40 p-1.5">
                   <div className="grid grid-flow-col grid-rows-2 auto-cols-max gap-1.5">
-                    {Array.from({ length: TILE_VARIANT_COUNT[brush] ?? 1 }, (_, i) => (
+                    {/* Sorted by label for display only — each button still targets its own
+                        original variant index i (art file, saved-map value), so re-sorting
+                        this list can never relabel or repaint an existing tile. */}
+                    {Array.from({ length: TILE_VARIANT_COUNT[brush] ?? 1 }, (_, i) => i)
+                      .sort((a, b) => byName(VARIANT_LABEL[brush]?.[a] ?? String(a + 1).padStart(3, "0"), VARIANT_LABEL[brush]?.[b] ?? String(b + 1).padStart(3, "0")))
+                      .map((i) => (
                   <button
                     key={i}
                     type="button"
@@ -4656,8 +4666,7 @@ function MapEditorScreen({
                     ones flagged as summons, so the picker widens for that side only. */}
                 {(summonSide === "neutral" ? classOptions : summonOptions).map((c) => (
                   <option key={c} value={c}>
-                    {CLASSES[c].name} · {CLASSES[c].role}
-                    {heroNameByClassId[c] ? ` — ${heroNameByClassId[c]}` : ""}
+                    {heroNameByClassId[c] ?? `${CLASSES[c].name} · ${CLASSES[c].role}`}
                   </option>
                 ))}
               </select>
@@ -4968,8 +4977,7 @@ function MapEditorScreen({
                 >
                   {classOptions.map((c) => (
                     <option key={c} value={c}>
-                      {CLASSES[c].name} · {CLASSES[c].role}
-                      {heroNameByClassId[c] ? ` — ${heroNameByClassId[c]}` : ""}
+                      {heroNameByClassId[c] ?? `${CLASSES[c].name} · ${CLASSES[c].role}`}
                     </option>
                   ))}
                 </select>
@@ -5810,9 +5818,16 @@ function BattleScreen({
         const saved = hotbars[actor.name];
         const expectedSpells = classSpells(actor.classId);
         if (!saved) return defaultSlots(actor.classId);
-        // Repair hotbars persisted while a hero alias incorrectly resolved to no spells.
-        // Respect real customization: only auto-heal a bar containing zero spell actions.
-        if (expectedSpells.length > 0 && !saved.some((slot) => slot?.kind === "spell")) {
+        // Repair hotbars persisted while a hero alias incorrectly resolved to no spells, or
+        // to a stale class's spells (hotbars are keyed by hero NAME, not classId — a bar
+        // saved for a name before that hero's class was fixed elsewhere, e.g. Malrec once
+        // showing Lancer spells, stays wrong forever otherwise; there's no other trigger
+        // that would ever re-derive it). Respect real customization: only auto-heal a bar
+        // that has no spell actions at all, or contains one that doesn't actually belong to
+        // this class's current kit — a deliberately empty/potion-only slot is left alone.
+        const savedSpellKinds = saved.filter((slot): slot is Extract<SlotAction, { kind: "spell" }> => slot?.kind === "spell").map((slot) => slot.spell);
+        const hasStaleSpell = savedSpellKinds.some((k) => !expectedSpells.includes(k));
+        if (expectedSpells.length > 0 && (savedSpellKinds.length === 0 || hasStaleSpell)) {
           const repaired: (SlotAction | null)[] = [
             ...expectedSpells.map((spell): SlotAction => ({ kind: "spell", spell })),
             ...saved.filter((slot) => slot?.kind === "potion"),
