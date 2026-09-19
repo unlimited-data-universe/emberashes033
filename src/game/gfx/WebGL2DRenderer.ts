@@ -630,11 +630,17 @@ export class WebGL2DRenderer {
     if (this.shadowBlur > 0) {
       const [r, g, b, a] = parseColorCached(this.shadowColor);
       if (a > 0.004) {
+        // Real Canvas2D shadowBlur is a soft Gaussian falloff; these are hard-edged scaled
+        // copies standing in for it, so they're kept small and faint. Whole-alpha rings this
+        // size read as a real blur on one isolated shape, but on the hex-range/target
+        // highlights — many adjacent, mostly-opaque hexes, each contributing its own rings —
+        // they used to stack (especially under "lighter" additive blending) into a much
+        // brighter wash than the shape's own shadowColor alpha would ever produce natively.
         const ref = Math.max(bounds.w, bounds.h, 1);
         const rings: Array<[number, number]> = [
-          [1 + (this.shadowBlur / ref) * 1.6, 0.16],
-          [1 + (this.shadowBlur / ref) * 1.0, 0.3],
-          [1 + (this.shadowBlur / ref) * 0.45, 0.5],
+          [1 + (this.shadowBlur / ref) * 1.1, 0.05],
+          [1 + (this.shadowBlur / ref) * 0.55, 0.1],
+          [1 + (this.shadowBlur / ref) * 0.22, 0.16],
         ];
         for (const [scaleMul, weight] of rings) draw(scaleMul, [r, g, b, 1], a * weight);
       }
@@ -847,15 +853,26 @@ export class WebGL2DRenderer {
 
   // ---- text ----
 
-  private textKey(text: string, stroke: boolean): string {
+  /** The current transform's scale factor — always the devicePixelRatio in this codebase
+   * (engine.ts opens every render with ctx.setTransform(dpr,0,0,dpr,0,0)), but derived from
+   * the matrix rather than assumed. Needed to rasterize text at native resolution: text is
+   * baked to a fixed-size offscreen canvas once and reused as a texture, so unlike vector
+   * fills it doesn't get sharper for free when the transform scales it up — without this it
+   * stayed CSS-pixel-resolution and came out visibly blurry on any HiDPI display. */
+  private currentScale(): number {
+    return Math.max(1, Math.hypot(this.matrix[0], this.matrix[1]));
+  }
+
+  private textKey(text: string, stroke: boolean, scale: number): string {
     const styleKey = stroke
       ? `stroke|${this.strokeStyle}|${this.lineWidth}`
       : `fill|${typeof this.fillStyle === "string" ? this.fillStyle : "grad"}`;
-    return `${this.font}|${this.textAlign}|${this.textBaseline}|${styleKey}|${text}`;
+    return `${this.font}|${this.textAlign}|${this.textBaseline}|${styleKey}|${Math.round(scale * 4)}|${text}`;
   }
 
   private getTextTexture(text: string, stroke: boolean): { tex: WebGLTexture; w: number; h: number } {
-    const key = this.textKey(text, stroke);
+    const scale = this.currentScale();
+    const key = this.textKey(text, stroke, scale);
     const hit = this.textTextureCache.get(key);
     if (hit) return hit;
     const measureCanvas = document.createElement("canvas");
@@ -867,10 +884,13 @@ export class WebGL2DRenderer {
     const fontSizeMatch = /(\d+(?:\.\d+)?)px/.exec(this.font);
     const fontSize = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : 16;
     const h = Math.max(1, Math.ceil(fontSize * 1.6 + pad));
+    // Rasterize at scale× so the texture is native-resolution once the GPU draws this quad
+    // back at `w × h` local units through the current (scale×) transform.
     const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = Math.ceil(w * scale);
+    canvas.height = Math.ceil(h * scale);
     const ctx = canvas.getContext("2d")!;
+    ctx.scale(scale, scale);
     ctx.font = this.font;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
