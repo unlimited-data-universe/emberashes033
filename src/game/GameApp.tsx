@@ -3979,10 +3979,16 @@ function MapEditorScreen({
   // search in a dropdown. pt-BR collation so accents and case sort where a reader expects.
   const classOptions = (Object.keys(CLASSES) as ClassId[]).sort((a, b) => byName(CLASSES[a].name, CLASSES[b].name));
   const summonOptions = [...SUMMON_CLASSES].sort((a, b) => byName(CLASSES[a].name, CLASSES[b].name));
+  // A hero-identity classId (aldric, kaelFinal, conjurer, ...) deliberately keeps the same
+  // display name/role as the generic job it's a re-skin of (Aldric's own class is still
+  // named "Lanceiro", same as the plain Lancer enemy) — so any picker that just prints
+  // CLASSES[c].name is unfindable/ambiguous for that classId specifically. This map lets
+  // such a picker suffix the hero's own name onto their own classId's label only, leaving
+  // every generic classId's label untouched.
+  const heroNameByClassId: Partial<Record<ClassId, string>> = Object.fromEntries(EDITOR_HEROES.map((h) => [h.classId, h.name]));
   // One entry per distinct sprite (several classes share art — a promoted class, an
   // alternate skin), labeled by whichever class name reaches it first. Named heroes go
-  // first so each of them claims their own sprite's slot under their own name even while
-  // they still share on-disk art with a generic class (e.g. neera/nira with archer) — the
+  // first so each of them claims their own sprite's slot under their own name — the
   // dialog editor needs to be able to name Kael/Neera/Voss/Salazar/Aldric/Malrec as
   // speakers regardless of whether their final art has landed yet.
   const portraitOptions = (() => {
@@ -4651,6 +4657,7 @@ function MapEditorScreen({
                 {(summonSide === "neutral" ? classOptions : summonOptions).map((c) => (
                   <option key={c} value={c}>
                     {CLASSES[c].name} · {CLASSES[c].role}
+                    {heroNameByClassId[c] ? ` — ${heroNameByClassId[c]}` : ""}
                   </option>
                 ))}
               </select>
@@ -4962,6 +4969,7 @@ function MapEditorScreen({
                   {classOptions.map((c) => (
                     <option key={c} value={c}>
                       {CLASSES[c].name} · {CLASSES[c].role}
+                      {heroNameByClassId[c] ? ` — ${heroNameByClassId[c]}` : ""}
                     </option>
                   ))}
                 </select>
@@ -4982,7 +4990,10 @@ function MapEditorScreen({
                   <button
                     type="button"
                     onClick={() => {
-                      const pool = classOptions.filter((c) => !isSummonClass(c));
+                      // Never hand a random enemy a named hero's own classId (Aldric,
+                      // kaelFinal, Malrec's conjurer, ...) — that classId's unit ID belongs
+                      // exclusively to that hero, not to a shuffled mook.
+                      const pool = classOptions.filter((c) => !isSummonClass(c) && !heroNameByClassId[c]);
                       const pick = pool[Math.floor(Math.random() * pool.length)] ?? s.classId;
                       updateSpawn(side, i, { classId: pick });
                     }}

@@ -591,6 +591,9 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     size: 1,
     init: 7,
   },
+  // sprite is "archerRecruit", NOT "nira" — that's Neera the MC's own sprite. See the
+  // SpriteId comment in types.ts: this generic enemy (and its own promotions, ranger/
+  // assassin) gets its own alternate slot so it never shares Neera's unit ID.
   archer: {
     id: "archer",
     name: "Arqueira",
@@ -603,10 +606,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 6,
     minRange: 2,
     maxRange: 4,
-    sprite: "nira",
+    sprite: "archerRecruit",
     size: 1,
     init: 3,
   },
+  // sprite is "mageRecruit", NOT "voss" — that's Voss the MC's own sprite. Same split as
+  // archer above; elementalist/warlock (this class's own promotions) follow suit.
   mage: {
     id: "mage",
     name: "Mago Negro",
@@ -619,10 +624,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 2,
-    sprite: "voss",
+    sprite: "mageRecruit",
     size: 1,
     init: 5,
   },
+  // sprite is "healerRecruit", NOT "salazar" — that's Salazar the MC's own sprite. Same
+  // split as archer/mage above; cleric/bishop (this class's own promotions) follow suit.
   healer: {
     id: "healer",
     name: "Curandeiro",
@@ -635,7 +642,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 1,
-    sprite: "salazar",
+    sprite: "healerRecruit",
     size: 1,
     init: 8,
   },
@@ -1225,6 +1232,8 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   // Classes promovidas (promoção no nível 15) — stats de combate, arte e nome definitivo
   // ainda são provisórios (copiados 1:1 da classe base, sprite reaproveitado). Só a
   // progressão de magia (tierUses / CLASS_TIER_TABLE mais abaixo) já é a de verdade.
+  // sprite is "mageRecruit", NOT "voss" — see CLASSES.mage above; a promoted generic Mage
+  // enemy stays on the same alternate slot, never Voss's own.
   elementalist: {
     id: "elementalist",
     name: "Elementalista",
@@ -1237,7 +1246,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 2,
-    sprite: "voss",
+    sprite: "mageRecruit",
     size: 1,
     init: 5,
   },
@@ -1253,7 +1262,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 2,
-    sprite: "voss",
+    sprite: "mageRecruit",
     size: 1,
     init: 5,
   },
@@ -1289,6 +1298,8 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     size: 1,
     init: 6,
   },
+  // sprite is "healerRecruit", NOT "salazar" — see CLASSES.healer above; a promoted generic
+  // Healer enemy stays on the same alternate slot, never Salazar's own.
   cleric: {
     id: "cleric",
     name: "Clérigo",
@@ -1301,7 +1312,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 1,
-    sprite: "salazar",
+    sprite: "healerRecruit",
     size: 1,
     init: 8,
   },
@@ -1317,10 +1328,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 1,
-    sprite: "salazar",
+    sprite: "healerRecruit",
     size: 1,
     init: 8,
   },
+  // sprite is "archerRecruit", NOT "nira" — see CLASSES.archer above; a promoted generic
+  // Archer enemy stays on the same alternate slot, never Neera's own.
   ranger: {
     id: "ranger",
     name: "Patrulheiro",
@@ -1333,7 +1346,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 6,
     minRange: 2,
     maxRange: 4,
-    sprite: "nira",
+    sprite: "archerRecruit",
     size: 1,
     init: 3,
   },

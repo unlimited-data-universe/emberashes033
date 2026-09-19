@@ -86,7 +86,7 @@ export function portraitFor(sprite: SpriteId): { src: string; framed: boolean } 
 }
 
 const TILES = Object.keys(TILE_VARIANT_COUNT) as TerrainId[];
-const SPRITES: SpriteId[] = ["kael", "nira", "voss", "salazar", "malrec", "aldric", "defaultLancer", "soldier", "brigand", "captain", "sorcerer", "horror", "Asherah", "pikeman", "wardog", "troll", "morvenian-wolf", "punisher", "theButcher", "birolho", "birolho2", "birolho3", "familiar", "familiar2", "swamp-blue-calf", "ancient-golem", "lancer", "sandoval", "kaelFinal", "kaelEarly", "conjurer", "cultist-v2"];
+const SPRITES: SpriteId[] = ["kael", "nira", "voss", "salazar", "malrec", "aldric", "defaultLancer", "soldier", "brigand", "captain", "sorcerer", "horror", "Asherah", "pikeman", "wardog", "troll", "morvenian-wolf", "punisher", "theButcher", "birolho", "birolho2", "birolho3", "familiar", "familiar2", "swamp-blue-calf", "ancient-golem", "lancer", "sandoval", "kaelFinal", "kaelEarly", "conjurer", "cultist-v2", "archerRecruit", "mageRecruit", "healerRecruit"];
 
 const LOAD_POOL = 8;
 let loadActive = 0;
@@ -146,7 +146,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 // big horrors, and the creatures cut from reference video (familiar, familiar2, ancient
 // golem). loadGameArt rejects on any missing file, so this set and what is on disk have to
 // move together.
-const HERO_IDLE = new Set<SpriteId>(["kael", "nira", "voss", "salazar", "malrec", "aldric", "defaultLancer", "horror", "Asherah", "familiar", "familiar2", "ancient-golem", "lancer", "sandoval", "kaelFinal", "kaelEarly", "conjurer"]);
+const HERO_IDLE = new Set<SpriteId>(["kael", "nira", "voss", "salazar", "malrec", "aldric", "defaultLancer", "horror", "Asherah", "familiar", "familiar2", "ancient-golem", "lancer", "sandoval", "kaelFinal", "kaelEarly", "conjurer", "archerRecruit", "mageRecruit", "healerRecruit"]);
 
 /** arrow-002.png is a moody product photo shot on black with no alpha channel; it was
  * originally drawn with a screen/lighter blend to fake-hide that background, which only
@@ -206,6 +206,12 @@ export async function loadGameArt(): Promise<GameArt> {
     nira: { n: 4, bust: "" },
     voss: { n: 4, bust: "" },
     salazar: { n: 4, bust: "" },
+    // Generic-enemy "alter" sprites (see the SpriteId comment in types.ts) — same file
+    // shape as the hero folder they started as a copy of, since they're literally that
+    // copy for now.
+    archerRecruit: { n: 4, bust: "" },
+    mageRecruit: { n: 4, bust: "" },
+    healerRecruit: { n: 4, bust: "" },
     malrec: { n: 5, bust: "?v=sheet2" },
     aldric: { n: 36, bust: "?v=aldric-final-001" },
     defaultLancer: { n: 5, bust: "?v=sheet2" },
