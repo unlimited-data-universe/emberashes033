@@ -87,7 +87,11 @@ export type ClassId =
   // Conjurer tier 1 (Summon Familiar): not a recruitable class — its combat stats are
   // computed live from its summoner (see castSummonFamiliar), CLASSES.familiar only
   // supplies a sprite/size/range fallback and satisfies the ClassId-keyed tables below.
-  | "familiar";
+  | "familiar"
+  // Stronger evolution of the same summon, cast once the conjurer has promoted (level 15+,
+  // sorcerer/necromancer) — see castSummonFamiliar. Same "stats computed live, this is only
+  // a fallback" deal as "familiar" above.
+  | "familiar2";
 export type SpriteId = "kael" | "nira" | "voss" | "salazar" | "malrec" | "aldric" | "defaultLancer" | "soldier" | "brigand" | "captain" | "sorcerer" | "horror" | "Asherah" | "pikeman" | "wardog" | "troll" | "morvenian-wolf" | "punisher" | "theButcher" | "birolho" | "birolho2" | "birolho3" | "familiar" | "familiar2" | "swamp-blue-calf" | "ancient-golem" | "lancer" | "sandoval" | "kaelFinal" | "kaelEarly" | "conjurer" | "cultist-v2";
 export type HealId = "cureMinor" | "cureWounds" | "cureLight";
 export type SpellKind =
@@ -106,6 +110,7 @@ export type SpellKind =
   | "sweep"
   | "trip"
   | "summonFamiliar"
+  | "summonFamiliar2"
   | "webOfDreams"
   | "multiShot"
   | "secondWind"

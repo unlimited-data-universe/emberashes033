@@ -1170,6 +1170,26 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     init: 5,
     summon: true,
   },
+  // Same deal as "familiar" above — every combat stat here is a fallback only, computed
+  // live from the summoner at cast time (see castSummonFamiliar). Cast once the conjurer
+  // has promoted (level 15+), it reads as the familiar's own stronger evolution.
+  familiar2: {
+    id: "familiar2",
+    name: "Familiar Maior",
+    role: "Invocação",
+    hp: 16,
+    atk: 5,
+    mag: 5,
+    def: 2,
+    res: 2,
+    mov: 5,
+    minRange: 1,
+    maxRange: 1,
+    sprite: "familiar2",
+    size: 1,
+    init: 6,
+    summon: true,
+  },
   paladin: {
     id: "paladin",
     name: "Paladino",
@@ -1404,6 +1424,7 @@ export const GROWTH: Record<ClassId, { hp: number; atk: number; mag: number; def
   // every time one is cast, not from a level table. Present only because GROWTH is keyed by
   // every ClassId.
   familiar: { hp: 0, atk: 0, mag: 0, def: 0, res: 0 },
+  familiar2: { hp: 0, atk: 0, mag: 0, def: 0, res: 0 },
   paladin: { hp: 5, atk: 1, mag: 1, def: 3, res: 2 },
   heavyKnight: { hp: 5, atk: 1, mag: 0, def: 3, res: 1 },
   // Provisório — copiado da classe base (ver nota em CLASSES acima).
@@ -2923,6 +2944,16 @@ export const SUMMON_FAMILIAR = {
   statScale: 0.5,
 };
 
+/** Conjurer tier 2: a second, stronger summon — its own spell/slot/tier-2 charge, not an
+ * upgrade of Invocar Familiar. The first case of a class having more than one spell choice
+ * at the same tier, sharing that tier's pool of uses (see castSummonFamiliar's `evolved`
+ * parameter and SPELL_TIER.summonFamiliar2). */
+export const SUMMON_FAMILIAR2 = {
+  name: "Invocar Familiar Maior",
+  range: 7,
+  statScale: 0.75,
+};
+
 /** Conjurer tier 2: drops a sticky patch of webbing centered on the target cell. Every unit
  * (either side) standing in it at cast time rolls sleepChance to fall asleep for 1D4 of its
  * own turns (early wake + sleepBonusDamage on the hit that wakes it). While the zone lasts,
@@ -3304,6 +3335,7 @@ export const SPELL_TIER: Partial<Record<SpellKind, SpellTier>> = {
   sweep: 2,
   trip: 3,
   summonFamiliar: 1,
+  summonFamiliar2: 2,
   webOfDreams: 2,
   fireball: 3,
   lightningTier3: 5,

@@ -1,4 +1,4 @@
-import { BIG_HOUSE_DECOR_IDS, CAUSTIC_VENOM, CHEST_DECOR_IDS, CHEST_LOOT, CLASSES, CLEAVE, cleaveDoublesVs, cleaveFormula, cleavePower, CURE_DISEASE, CURES, DECORATIONS, DISEASE, DOUBLE_STRIKE, doubleStrikeFormula, doubleStrikePower, EMPTY_BAG, EQUIPMENT, EXP_TO_LEVEL, expForHit, FIREBALL, FOOTPRINT_TYPE_7, FOOTPRINT_TYPE_8, formatSpellUseGains, HIGH_GROUND_LIFT, HOUSE_DECOR_IDS, KILL_DROP_CHANCE, LIGHTNING, LIGHTNING_T3, LONG_SHOT, longShotFormula, longShotPower, MAGIC_MISSILE, magicMissileCount, MAX_LEVEL, PIERCING, piercingMul, PIERCING_THRUST, POTION_CARRY_MAX, POTIONS, RATIONS_ICON, SHOCK, SUMMON_FAMILIAR, SWEEP, TRIP, WEAPON_MAX_ENH, WEAPONS, WEB_OF_DREAMS, healFormula, barricadeDecor, decorationCells, decorationFacing, decorationImage, diceFormula, effectiveMaxRange, enemyLevelFor, equipmentIcon, fireballFormula, fireballOrigin, fireballPower, fireballRangeTiles, fireballTiles, hexAreaTiles, isProjectile, isSummonClass, isBossClass, lightningDice, lightningFormula, lightningTier3Formula, parseLayout, placedFootprint, potionLabel, rollCure, rollDice, rollPotion, shockChargesFor, spellFormula, spellTier, spellUseGains, starterWeaponFor, STARTING_BAG, statsFor, terrainNote, TERRAIN, tierKey, tierUses, gearStatBonus, offHandBlocked, equipmentFitsSlot, equipmentSlotName, equipmentTooltip, weaponTooltip, potionTooltip, weaponIcon, weaponRoll, weightedLootPick, weightedPotionPick, weightedWeaponPick, MULTI_SHOT, multiShotFormula, multiShotPower, multiShotTargets, SECOND_WIND, secondWindPct, auraPower, AURA_OF_PROTECTION, INTIMIDATING_PRESENCE, DIVINE_WRATH, divineWrathFormula, divineWrathPower, SHOULDER_SMASH, shoulderSmashFormula, shoulderSmashPower, SIGHT_RADIUS, STAMPEDE, stampedeFormula, stampedePower, cultistSpellUses, brigandSpellUses, birolhoSpellUses, webOfDreamsSize } from "./data";
+import { BIG_HOUSE_DECOR_IDS, CAUSTIC_VENOM, CHEST_DECOR_IDS, CHEST_LOOT, CLASSES, CLEAVE, cleaveDoublesVs, cleaveFormula, cleavePower, CURE_DISEASE, CURES, DECORATIONS, DISEASE, DOUBLE_STRIKE, doubleStrikeFormula, doubleStrikePower, EMPTY_BAG, EQUIPMENT, EXP_TO_LEVEL, expForHit, FIREBALL, FOOTPRINT_TYPE_7, FOOTPRINT_TYPE_8, formatSpellUseGains, HIGH_GROUND_LIFT, HOUSE_DECOR_IDS, KILL_DROP_CHANCE, LIGHTNING, LIGHTNING_T3, LONG_SHOT, longShotFormula, longShotPower, MAGIC_MISSILE, magicMissileCount, MAX_LEVEL, PIERCING, piercingMul, PIERCING_THRUST, POTION_CARRY_MAX, POTIONS, RATIONS_ICON, SHOCK, SUMMON_FAMILIAR, SUMMON_FAMILIAR2, SWEEP, TRIP, WEAPON_MAX_ENH, WEAPONS, WEB_OF_DREAMS, healFormula, barricadeDecor, decorationCells, decorationFacing, decorationImage, diceFormula, effectiveMaxRange, enemyLevelFor, equipmentIcon, fireballFormula, fireballOrigin, fireballPower, fireballRangeTiles, fireballTiles, hexAreaTiles, isProjectile, isSummonClass, isBossClass, lightningDice, lightningFormula, lightningTier3Formula, parseLayout, placedFootprint, potionLabel, rollCure, rollDice, rollPotion, shockChargesFor, spellFormula, spellTier, spellUseGains, starterWeaponFor, STARTING_BAG, statsFor, terrainNote, TERRAIN, tierKey, tierUses, gearStatBonus, offHandBlocked, equipmentFitsSlot, equipmentSlotName, equipmentTooltip, weaponTooltip, potionTooltip, weaponIcon, weaponRoll, weightedLootPick, weightedPotionPick, weightedWeaponPick, MULTI_SHOT, multiShotFormula, multiShotPower, multiShotTargets, SECOND_WIND, secondWindPct, auraPower, AURA_OF_PROTECTION, INTIMIDATING_PRESENCE, DIVINE_WRATH, divineWrathFormula, divineWrathPower, SHOULDER_SMASH, shoulderSmashFormula, shoulderSmashPower, SIGHT_RADIUS, STAMPEDE, stampedeFormula, stampedePower, cultistSpellUses, brigandSpellUses, birolhoSpellUses, webOfDreamsSize } from "./data";
 import type { SpellTier } from "./data";
 import { canCounter, makeForecast, mulberry32, powerOf, protOf, rollDamage, rollDamageCustom } from "./combat";
 import {
@@ -3616,6 +3616,18 @@ export class BattleEngine {
     sfxPlay.ui();
   }
 
+  startSummonFamiliar2(): void {
+    const u = this.units.find((x) => x.id === this.selectedId);
+    if (!u || u.acted || this.tierRemaining(u, "summonFamiliar2") <= 0) return;
+    this.mode = "awaitSpell";
+    this.spellKind = "summonFamiliar2";
+    this.spellArmed = false;
+    this.spellAim = null;
+    this.hover = null;
+    this.tip = `${SUMMON_FAMILIAR2.name}: convoca um aliado maior, com ${Math.round(SUMMON_FAMILIAR2.statScale * 100)}% dos seus atributos atuais, até ${SUMMON_FAMILIAR2.range} hexes. Toque num espaço livre.`;
+    sfxPlay.ui();
+  }
+
   startWebOfDreams(): void {
     const u = this.units.find((x) => x.id === this.selectedId);
     if (!u || u.acted || this.tierRemaining(u, "webOfDreams") <= 0) return;
@@ -3754,7 +3766,11 @@ export class BattleEngine {
       return;
     }
     if (this.spellKind === "summonFamiliar") {
-      this.castSummonFamiliar(u, cell);
+      this.castSummonFamiliar(u, cell, false);
+      return;
+    }
+    if (this.spellKind === "summonFamiliar2") {
+      this.castSummonFamiliar(u, cell, true);
       return;
     }
     if (this.spellKind === "webOfDreams") {
@@ -4172,8 +4188,9 @@ export class BattleEngine {
       if (!this.targetable(here) || manhattan(caster, cell) > MAGIC_MISSILE.range) return false;
       return clearShot(caster, cell, this.tiles, this.cols, "bolt", this.decorOverlay);
     }
-    if (this.spellKind === "summonFamiliar") {
-      if (manhattan(caster, cell) > SUMMON_FAMILIAR.range) return false;
+    if (this.spellKind === "summonFamiliar" || this.spellKind === "summonFamiliar2") {
+      const range = this.spellKind === "summonFamiliar2" ? SUMMON_FAMILIAR2.range : SUMMON_FAMILIAR.range;
+      if (manhattan(caster, cell) > range) return false;
       if (!inBounds(cell.x, cell.y, this.cols, this.rows)) return false;
       if (!this.hexAt(cell.x, cell.y).passable) return false;
       return !this.occ().get(key(cell.x, cell.y));
@@ -4624,20 +4641,23 @@ export class BattleEngine {
    * `this.units` — no queued animation step, it just appears. It has no slot in this round's
    * `turnOrder` (that's rebuilt from `this.units` fresh every round in startNewRound), so it
    * waits for the round after this one to act, same as any other reinforcement would. */
-  private castSummonFamiliar(unit: Unit, cell: Point): void {
+  /** Summon Familiar / Summon Familiar 2 (Conjurer tiers 1 and 2): `evolved` selects which of
+   * the two — same spawn logic, just a stronger creature/class/tier and its own spell/slot for
+   * Familiar 2, not an automatic upgrade of the first. See SUMMON_FAMILIAR2's note. */
+  private castSummonFamiliar(unit: Unit, cell: Point, evolved: boolean): void {
     if (!this.spellAimValid(unit, cell)) {
       this.tip = "Escolha um espaço livre ao alcance.";
       sfxPlay.ui();
       return;
     }
-    const cls = CLASSES.familiar;
-    const scale = SUMMON_FAMILIAR.statScale;
+    const cls = evolved ? CLASSES.familiar2! : CLASSES.familiar!;
+    const scale = evolved ? SUMMON_FAMILIAR2.statScale : SUMMON_FAMILIAR.statScale;
     const maxHp = Math.max(1, Math.round(unit.maxHp * scale));
     const familiarInitiativeRoll = 1 + Math.floor(this.rng() * 20);
     const familiar: Unit = {
       id: `player-familiar-${this.units.length}`,
-      name: `Familiar de ${unit.name}`,
-      classId: "familiar",
+      name: evolved ? `Familiar Maior de ${unit.name}` : `Familiar de ${unit.name}`,
+      classId: cls.id,
       className: cls.name,
       role: cls.role,
       side: "player",
@@ -4702,7 +4722,7 @@ export class BattleEngine {
       moveBudgetUsed: 0,
     };
     this.units.push(familiar);
-    this.spendTier(unit, "summonFamiliar");
+    this.spendTier(unit, evolved ? "summonFamiliar2" : "summonFamiliar");
     this.spellKind = null;
     this.missileTargets = [];
     this.emitPortalFx(cell.x, cell.y);
@@ -4711,7 +4731,14 @@ export class BattleEngine {
     // Unlike the original instant summon, route the completed summon through the same
     // queued spell action that Birolho uses. The familiar remains exactly the same;
     // this only gives its caster the authored casting sequence before the turn ends.
-    this.queue.push({ type: "spell", att: unit.id, tiles: [cell], ids: [], label: SUMMON_FAMILIAR.name, spellKind: "summonFamiliar" });
+    this.queue.push({
+      type: "spell",
+      att: unit.id,
+      tiles: [cell],
+      ids: [],
+      label: evolved ? SUMMON_FAMILIAR2.name : SUMMON_FAMILIAR.name,
+      spellKind: evolved ? "summonFamiliar2" : "summonFamiliar",
+    });
   }
 
   private castWebOfDreams(unit: Unit, click: Point): void {
@@ -6658,7 +6685,7 @@ export class BattleEngine {
   private idleFrame(u: Unit, n: number): number {
     if (n <= 1) return 0;
     const moving = this.active?.type === "move" && this.active.id === u.id;
-    if (u.classId === "familiar") {
+    if (u.classId === "familiar" || u.classId === "familiar2") {
       const rate = moving ? 8.0 : 5.5;
       return Math.floor(u.bob * rate) % n;
     }
@@ -6764,7 +6791,7 @@ export class BattleEngine {
   private liveMotion(u: Unit, cell: number): { bob: number; sway: number; breath: number } {
     if (!u.alive || this.reducedMotion) return { bob: 0, sway: 0, breath: 0 };
     const t = u.bob;
-    if (u.classId === "familiar") {
+    if (u.classId === "familiar" || u.classId === "familiar2") {
       return {
         bob: Math.sin(t * 1.6) * 2.4,
         sway: Math.sin(t * 0.9) * 0.7,
@@ -7067,6 +7094,10 @@ export class BattleEngine {
         overlay(this.healRangeTiles(selected, SUMMON_FAMILIAR.range), "rgba(180,150,235,0.45)");
         const cell = this.hover ?? this.spellAim;
         if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(200,170,245,0.55)");
+      } else if (selected && this.spellKind === "summonFamiliar2") {
+        overlay(this.healRangeTiles(selected, SUMMON_FAMILIAR2.range), "rgba(180,150,235,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(200,170,245,0.55)");
       } else if (selected && this.spellKind === "webOfDreams") {
         overlay(this.healRangeTiles(selected, WEB_OF_DREAMS.range), "rgba(170,140,230,0.45)");
         const cell = this.hover ?? this.spellAim;
@@ -7179,6 +7210,47 @@ export class BattleEngine {
     this.drawDecorations(ctx, tile, cssW, cssH, "behind");
     this.drawPortalFx(ctx, tile);
 
+    // The mouse-selection hex outline is drawn here, on this (topmost) canvas rather than
+    // in renderGround, so it always reads above the WebGL water FX layer stacked in between
+    // the ground and units canvases (see BattleCanvas) instead of being hidden under it —
+    // but before any unit sprite, so the outline (and its blocked/height label) reads as a
+    // ground marking under the units instead of a decal painted over their artwork.
+    {
+      const cur = this.hover ?? this.cursor;
+      const { cx, cy } = this.hexCenter(cur.x, cur.y);
+      const hid = tileAt(this.tiles, this.cols, cur.x, cur.y);
+      const ht = TERRAIN[hid];
+      const blocked = !ht.passable;
+      if (blocked) {
+        ctx.save();
+        ctx.shadowColor = "rgba(219,58,44,0.95)";
+        ctx.shadowBlur = tile * 0.55;
+        ctx.strokeStyle = "rgba(255,90,72,0.95)";
+        ctx.lineWidth = 3;
+        this.hexPath(ctx, cx, cy, tile * 0.9);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = "rgba(240,235,227,0.9)";
+        ctx.lineWidth = 2;
+        this.hexPath(ctx, cx, cy, tile * 0.9);
+        ctx.stroke();
+      }
+      if (blocked || ht.height) {
+        const label = blocked ? ht.name.toUpperCase() : "ALTO +2";
+        const fontPx = Math.max(11, Math.round(tile * 0.32));
+        ctx.font = `700 ${fontPx}px Figtree, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = Math.max(3, fontPx * 0.22);
+        ctx.strokeStyle = "rgba(12,11,10,0.88)";
+        ctx.fillStyle = blocked ? "#ff7a68" : "#efe4c4";
+        ctx.strokeText(label, cx, cy + tile * 0.38);
+        ctx.fillText(label, cx, cy + tile * 0.38);
+      }
+    }
+
     const cell = tile * sqrt3;
     const sorted = [...this.units].sort((a, b) => a.drawY - b.drawY || a.drawX - b.drawX);
     for (const u of sorted) {
@@ -7215,7 +7287,12 @@ export class BattleEngine {
       // While moving, a sprite that has a walk cut plays it; one that doesn't falls back to
       // its idle loop, which idleFrame already runs faster for a moving unit.
       const faceRight = u.facing === 1;
-      const walkPool = faceRight ? this.art.walks[u.sprite] : (this.art.walksLeft[u.sprite] ?? this.art.walks[u.sprite]);
+      // Lancer's authored move/move-left cuts read backwards against their own facing
+      // (moving right visibly played the left-facing footage and vice versa) — swap which
+      // pool answers which facing, walk only, per direct report. Cultist V2's own walk
+      // "backwards" complaint has a different cause: see dirActionWalk below.
+      const useWalkLeft = u.sprite === "lancer" ? faceRight : !faceRight;
+      const walkPool = useWalkLeft ? (this.art.walksLeft[u.sprite] ?? this.art.walks[u.sprite]) : this.art.walks[u.sprite];
       const atkPool = faceRight ? this.art.attacks[u.sprite] : (this.art.attacksLeft[u.sprite] ?? this.art.attacks[u.sprite]);
       const walk = atk == null && moving ? walkPool : undefined;
       // attackPose computes its index against whichever pool it picked (casts for a spell/heal
@@ -7265,11 +7342,14 @@ export class BattleEngine {
       ctx.translate(px + sway, py + footY + bob - lift);
       // Dedicated left/right walk+attack cuts already face the enemy, so flipping
       // them would put the spear/staff on the wrong side. Idle still flips.
-      // theButcher (The Butcher — distinct from "punisher"/Carrasco) only has a dedicated
-      // left cut for its walk, not its attack (see walksLeft.theButcher in assets.ts) —
-      // its attack still falls back to the mirrored right-facing pool, so it stays out of
-      // the attack half of this check.
-      const dirActionWalk = (u.sprite === "malrec" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "theButcher") && moving;
+      // theButcher (The Butcher — distinct from "punisher"/Carrasco), familiar2 (Familiar
+      // Maior) and cultist-v2 only have a dedicated left cut for their walk, not their attack
+      // (see walksLeft.theButcher/familiar2/"cultist-v2" in assets.ts) — their attack still
+      // falls back to the mirrored right-facing pool, so all three stay out of the attack
+      // half of this check. cultist-v2 was missing from here entirely before: its own
+      // dedicated left-facing footage was getting mirrored a second time on top of itself
+      // while facing left, which is what actually read as "walking backwards" for it.
+      const dirActionWalk = (u.sprite === "malrec" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "theButcher" || u.sprite === "familiar2" || u.sprite === "cultist-v2") && moving;
       const dirActionAttack = (u.sprite === "malrec" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval") && atk != null;
       const dirAction = dirActionWalk || dirActionAttack;
       // The familiar's art is drawn facing left by default — the opposite of every other
@@ -7900,45 +7980,6 @@ export class BattleEngine {
     // Foreground parapets are the nearest scenery: no unit, HP bar, projectile, or spell
     // effect that is physically behind their artwork may show through.
     this.drawDecorations(ctx, tile, cssW, cssH, "front");
-
-    // The mouse-selection hex outline is drawn last, on this (topmost) canvas rather than
-    // in renderGround, so it always reads above the WebGL water FX layer stacked in between
-    // the ground and units canvases (see BattleCanvas) instead of being hidden under it.
-    const cur = this.hover ?? this.cursor;
-    {
-      const { cx, cy } = this.hexCenter(cur.x, cur.y);
-      const hid = tileAt(this.tiles, this.cols, cur.x, cur.y);
-      const ht = TERRAIN[hid];
-      const blocked = !ht.passable;
-      if (blocked) {
-        ctx.save();
-        ctx.shadowColor = "rgba(219,58,44,0.95)";
-        ctx.shadowBlur = tile * 0.55;
-        ctx.strokeStyle = "rgba(255,90,72,0.95)";
-        ctx.lineWidth = 3;
-        this.hexPath(ctx, cx, cy, tile * 0.9);
-        ctx.stroke();
-        ctx.restore();
-      } else {
-        ctx.strokeStyle = "rgba(240,235,227,0.9)";
-        ctx.lineWidth = 2;
-        this.hexPath(ctx, cx, cy, tile * 0.9);
-        ctx.stroke();
-      }
-      if (blocked || ht.height) {
-        const label = blocked ? ht.name.toUpperCase() : "ALTO +2";
-        const fontPx = Math.max(11, Math.round(tile * 0.32));
-        ctx.font = `700 ${fontPx}px Figtree, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.lineJoin = "round";
-        ctx.lineWidth = Math.max(3, fontPx * 0.22);
-        ctx.strokeStyle = "rgba(12,11,10,0.88)";
-        ctx.fillStyle = blocked ? "#ff7a68" : "#efe4c4";
-        ctx.strokeText(label, cx, cy + tile * 0.38);
-        ctx.fillText(label, cx, cy + tile * 0.38);
-      }
-    }
 
     if (shake) ctx.restore();
   }
