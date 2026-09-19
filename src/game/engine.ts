@@ -57,6 +57,7 @@ import type {
   Point,
   PotionId,
   SpellKind,
+  SpriteId,
   TerrainId,
   TierKey,
   Unit,
@@ -567,11 +568,28 @@ function remainingTier(classId: ClassId, tier: SpellTier, key: TierKey, level: n
 // applied after weapon-or-class range is resolved below, on top of either source.
 const MAGE_RANGE_BONUS_CLASSES: ReadonlySet<ClassId> = new Set(["mage", "voss", "elementalist", "warlock"]);
 
+// A named hero's own permanent look, independent of whatever classId they currently carry.
+// Without this, a promoted hero (see PROMOTIONS — Aldric to Sentinel/Templar, Neera to
+// Ranger/Assassin, ...) would render with the promoted class's own `sprite`, which is also
+// the generic sprite every enemy of that same class uses — the hero would visually turn
+// into a stock enemy unit the moment they promoted. classId itself still changes normally
+// (stats, spells); only the sprite stays pinned to the hero's identity.
+const HERO_SPRITE_BY_NAME: Partial<Record<string, SpriteId>> = {
+  Kael: "kaelFinal",
+  Neera: "nira",
+  Voss: "voss",
+  Salazar: "salazar",
+  Aldric: "aldric",
+  Malrec: "malrec",
+};
+
 function spawnUnit(spawn: Mission["playerSpawns"][number], side: Unit["side"], i: number, roster?: Roster, enemyLevel = 1): Unit {
   const requestedClassId = (side === "player" ? roster?.promotions?.[spawn.name] : undefined) ?? spawn.classId;
   // Kael's early/final entries are visual variants, never gameplay jobs. Every unit named
-  // Kael always runs the Warrior/Swordsman kit and always renders as Kael_Final — including
-  // old cloned maps that still name the early visual variant.
+  // Kael always runs the Warrior/Swordsman kit — including old cloned maps that still name
+  // the early visual variant. (His sprite is pinned the same way every other hero's is now,
+  // via HERO_SPRITE_BY_NAME below — this classId pin is Kael's own separate, pre-existing
+  // exception where even the gameplay job never changes.)
   const isKael = spawn.name === "Kael";
   const classId = isKael ? "swordsman" : requestedClassId;
   const cls = CLASSES[classId];
@@ -627,7 +645,7 @@ function spawnUnit(spawn: Mission["playerSpawns"][number], side: Unit["side"], i
     className: cls.name,
     role: cls.role,
     side,
-    sprite: isKael ? CLASSES.kaelFinal.sprite : cls.sprite,
+    sprite: HERO_SPRITE_BY_NAME[spawn.name] ?? cls.sprite,
     x: spawn.x,
     y: spawn.y,
     hp,
@@ -740,7 +758,7 @@ function unitFromSnap(snap: BattleUnitSnap): Unit {
     className: cls?.name ?? classId,
     role: cls?.role ?? "",
     side: snap.side,
-    sprite: snap.name === "Kael" ? CLASSES.kaelFinal.sprite : cls?.sprite ?? "soldier",
+    sprite: HERO_SPRITE_BY_NAME[snap.name] ?? cls?.sprite ?? "soldier",
     x: snap.x,
     y: snap.y,
     hp: snap.hp,

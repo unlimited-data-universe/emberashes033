@@ -487,7 +487,14 @@ export function canHitFrom(unit: Unit, from: Point, foe: Unit, tiles: TerrainId[
   const tile = tileAt(tiles, cols, from.x, from.y);
   const max = effectiveMaxRange(unit, tile);
   let ok = false;
-  for (const p of footprint(placed)) {
+  // Range is measured from the footprint's front row (the edge facing the target), not
+  // every cell the creature's body happens to occupy. A big multi-hex footprint (Golem,
+  // Troll, Horror, Asherah, Birolho — see FOOTPRINT_TYPE_7/8) trails several hexes behind
+  // its own x/y; checking range from all of them let those trailing hexes "reach" targets
+  // 2-3 tiles beyond the creature's real attack range, which tricked the AI into thinking
+  // it was already in range and never queuing a move — the "large creatures don't move"
+  // bug. Footprint is for occupancy/collision; targetable range is a front-row concept.
+  for (const p of footprintFrontRow(placed)) {
     if (inRangeOf(p.x, p.y, foe, unit.minRange, max)) {
       ok = true;
       break;

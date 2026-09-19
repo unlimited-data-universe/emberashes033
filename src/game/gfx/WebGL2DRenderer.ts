@@ -636,15 +636,20 @@ export class WebGL2DRenderer {
         // highlights — many adjacent, mostly-opaque hexes, each contributing its own rings —
         // they used to stack (especially under "lighter" additive blending) into a much
         // brighter wash than the shape's own shadowColor alpha would ever produce natively.
-        // Cut again after a second report that the hex move-range/target highlight glow
-        // still reads as too bright — these weights are now roughly a quarter of the
-        // original approximation, since that highlight is the worst case for stacking
-        // (many adjacent, mostly-opaque hexes each contributing their own rings).
+        // The real fix for the move-range/target highlight: that overlay calls fill()/
+        // stroke() once per cell across dozens of adjacent hexes sharing one large
+        // shadowBlur (engine.ts's `overlay()` helper). Scaling each hex's glow ring by the
+        // raw shadowBlur/ref ratio let outer rings balloon up to ~35% past the hex's own
+        // edge — which overlaps deep into every neighboring hex, and with dozens of hexes
+        // each contributing that same oversized ring, the overlap stacks into near-total
+        // opacity even at low per-ring alpha. Capping the ratio keeps a ring from ever
+        // extending far enough to meaningfully overlap an adjacent, edge-sharing hex.
         const ref = Math.max(bounds.w, bounds.h, 1);
+        const spread = Math.min(this.shadowBlur / ref, 0.35);
         const rings: Array<[number, number]> = [
-          [1 + (this.shadowBlur / ref) * 0.8, 0.02],
-          [1 + (this.shadowBlur / ref) * 0.4, 0.04],
-          [1 + (this.shadowBlur / ref) * 0.16, 0.07],
+          [1 + spread * 0.25, 0.03],
+          [1 + spread * 0.12, 0.06],
+          [1 + spread * 0.05, 0.1],
         ];
         for (const [scaleMul, weight] of rings) draw(scaleMul, [r, g, b, 1], a * weight);
       }
