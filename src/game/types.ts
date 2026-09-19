@@ -693,7 +693,7 @@ export interface HudSnapshot {
    * wants and how many are already chosen. Null when nothing is waiting on a pick. */
   targetPrompt: { name: string; need: number; picked: number } | null;
   zoom: number;
-  speedMode: "normal" | "fast";
+  speedMode: "slow" | "normal" | "fast";
   tip: string | null;
   inspected: UnitPublic | null;
   pendingFoe: UnitPublic | null;

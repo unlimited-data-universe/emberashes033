@@ -6350,15 +6350,15 @@ function BattleScreen({
               ))}
             </div>
             <p className="text-xs uppercase tracking-[0.18em] text-muted mb-2">Velocidade</p>
-            <div className="grid grid-cols-2 gap-1 mb-4">
-              {(["normal", "fast"] as const).map((mode) => (
+            <div className="grid grid-cols-3 gap-1 mb-4">
+              {(["slow", "normal", "fast"] as const).map((mode) => (
                 <Button
                   key={mode}
                   size="sm"
                   variant={hud.speedMode === mode ? undefined : "quiet"}
                   onClick={() => engine.setSpeed(mode)}
                 >
-                  {mode === "normal" ? "Normal" : "Rápida"}
+                  {mode === "slow" ? "Lenta" : mode === "normal" ? "Normal" : "Rápida"}
                 </Button>
               ))}
             </div>

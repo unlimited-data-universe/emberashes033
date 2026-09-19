@@ -1012,7 +1012,7 @@ export class BattleEngine {
    * pace; "fast" is the old, snappier speed for players who prefer it. Toggled from the
    * pause menu, applies to the very next step (mid-step changes aren't jarring since a
    * step is at most a quarter second). */
-  speedMode: "normal" | "fast" = "normal";
+  speedMode: "slow" | "normal" | "fast" = "normal";
   camX = 0;
   camY = 0;
   private viewW = 1;
@@ -1794,8 +1794,13 @@ export class BattleEngine {
     } else if (step.type === "combat") {
       const target = this.units.find((u) => u.id === step.def);
       if (!target || !target.alive) return;
+      const attacker = this.units.find((u) => u.id === step.att);
       this.faceSpriteToward(step.att, target.x);
-      this.faceSpriteToward(step.def, this.units.find((u) => u.id === step.att)?.x ?? target.x);
+      this.faceSpriteToward(step.def, attacker?.x ?? target.x);
+      if (attacker && attacker.side !== "player") {
+        this.ensureVisible(attacker.x, attacker.y);
+        this.ensureVisible(target.x, target.y);
+      }
       this.active = {
         type: "combat",
         att: step.att,
@@ -1846,6 +1851,12 @@ export class BattleEngine {
           : null;
         const tx = look?.x ?? step.tiles[0]?.x;
         if (tx != null) this.faceSpriteToward(step.att, tx);
+        const caster = this.units.find((u) => u.id === step.att);
+        if (caster && caster.side !== "player") {
+          this.ensureVisible(caster.x, caster.y);
+          const firstTile = step.tiles[0];
+          if (firstTile) this.ensureVisible(firstTile.x, firstTile.y);
+        }
       }
       this.banner = step.label ?? "";
       sfxPlay.crit();
@@ -1882,6 +1893,8 @@ export class BattleEngine {
       sfxPlay.ui();
       const healed = this.units.find((u) => u.id === step.def);
       if (healed) this.faceSpriteToward(step.att, healed.x);
+      const healer = this.units.find((u) => u.id === step.att);
+      if (healer && healer.side !== "player") this.ensureVisible(healer.x, healer.y);
     } else if (step.type === "cureDisease") {
       this.active = { type: "cureDisease", att: step.att, def: step.def, t: 0, applied: false };
       this.banner = CURE_DISEASE.name;
@@ -1928,7 +1941,7 @@ export class BattleEngine {
       if (to.x !== from.x) unit.facing = to.x > from.x ? 1 : -1;
       unit.walkPose = to.y < from.y ? "back" : to.y > from.y ? "front" : "side";
       a.t += dt;
-      const dur = this.speedMode === "fast" ? 0.12 : 0.22;
+      const dur = this.speedMode === "fast" ? 0.12 : this.speedMode === "slow" ? 0.36 : 0.22;
       const k = easeOut(Math.min(1, a.t / dur));
       unit.drawX = from.x + (to.x - from.x) * k;
       unit.drawY = from.y + (to.y - from.y) * k;
@@ -5461,6 +5474,10 @@ export class BattleEngine {
       this.centerOn(u.x, u.y);
     } else {
       this.mode = "locked";
+      // Bring the acting enemy into view before its queued actions start — movement already
+      // nudges the camera per step (see stepActive's "move" branch), but a unit that attacks
+      // or casts without moving first would otherwise act wherever the camera was last left.
+      this.ensureVisible(u.x, u.y);
       this.runAiFor(u);
     }
   }
@@ -6290,7 +6307,7 @@ export class BattleEngine {
     this.emit();
   }
 
-  setSpeed(mode: "normal" | "fast"): void {
+  setSpeed(mode: "slow" | "normal" | "fast"): void {
     this.speedMode = mode;
     this.emit();
   }
@@ -6633,7 +6650,7 @@ export class BattleEngine {
   private walkFrame(u: Unit, n: number): number {
     const a = this.active;
     if (n <= 1 || !a || a.type !== "move" || a.id !== u.id) return 0;
-    const dur = this.speedMode === "fast" ? 0.12 : 0.22;
+    const dur = this.speedMode === "fast" ? 0.12 : this.speedMode === "slow" ? 0.36 : 0.22;
     const steps = a.i + Math.min(1, a.t / dur);
     return Math.floor(steps * (n / 2) * (u.sprite === "conjurer" ? 0.9 : 1)) % n;
   }
