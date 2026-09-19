@@ -86,7 +86,7 @@ export function portraitFor(sprite: SpriteId): { src: string; framed: boolean } 
 }
 
 const TILES = Object.keys(TILE_VARIANT_COUNT) as TerrainId[];
-const SPRITES: SpriteId[] = ["kael", "nira", "voss", "salazar", "malrec", "aldric", "defaultLancer", "soldier", "brigand", "captain", "sorcerer", "horror", "Asherah", "pikeman", "wardog", "troll", "morvenian-wolf", "punisher", "theButcher", "birolho", "birolho2", "birolho3", "familiar", "swamp-blue-calf", "ancient-golem", "lancer", "sandoval", "kaelFinal", "kaelEarly", "conjurer", "cultist-v2"];
+const SPRITES: SpriteId[] = ["kael", "nira", "voss", "salazar", "malrec", "aldric", "defaultLancer", "soldier", "brigand", "captain", "sorcerer", "horror", "Asherah", "pikeman", "wardog", "troll", "morvenian-wolf", "punisher", "theButcher", "birolho", "birolho2", "birolho3", "familiar", "familiar2", "swamp-blue-calf", "ancient-golem", "lancer", "sandoval", "kaelFinal", "kaelEarly", "conjurer", "cultist-v2"];
 
 const LOAD_POOL = 8;
 let loadActive = 0;
@@ -143,10 +143,10 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 // Sprites cut as a 12-frame idle rather than the 4-frame default — the heroes, the two
-// big horrors, and the two creatures cut from reference video (familiar, ancient golem).
-// loadGameArt rejects on any missing file, so this set and what is on disk have to move
-// together.
-const HERO_IDLE = new Set<SpriteId>(["kael", "nira", "voss", "salazar", "malrec", "aldric", "defaultLancer", "horror", "Asherah", "familiar", "ancient-golem", "lancer", "sandoval", "kaelFinal", "kaelEarly", "conjurer"]);
+// big horrors, and the creatures cut from reference video (familiar, familiar2, ancient
+// golem). loadGameArt rejects on any missing file, so this set and what is on disk have to
+// move together.
+const HERO_IDLE = new Set<SpriteId>(["kael", "nira", "voss", "salazar", "malrec", "aldric", "defaultLancer", "horror", "Asherah", "familiar", "familiar2", "ancient-golem", "lancer", "sandoval", "kaelFinal", "kaelEarly", "conjurer"]);
 
 /** arrow-002.png is a moody product photo shot on black with no alpha channel; it was
  * originally drawn with a screen/lighter blend to fake-hide that background, which only
@@ -210,6 +210,9 @@ export async function loadGameArt(): Promise<GameArt> {
     aldric: { n: 36, bust: "?v=aldric-final-001" },
     defaultLancer: { n: 5, bust: "?v=sheet2" },
     familiar: { n: 8, bust: "?v=6" },
+    // Familiar 2 — the crouch/lunge strike cut from reference video (see CAST_FRAMES and
+    // WALK_FRAMES below for its casting and walk cuts).
+    familiar2: { n: 12, bust: "" },
     "ancient-golem": { n: 8, bust: "" },
     "morvenian-wolf": { n: 6, bust: "" },
     birolho: { n: 4, bust: "" },
@@ -243,6 +246,9 @@ export async function loadGameArt(): Promise<GameArt> {
     // Thrust, Sweep, ...), never for a plain attack, which stays on the ATT cut.
     aldric: { n: 36, bust: "?v=aldric-final-001" },
     "cultist-v2": { n: 36, bust: "" },
+    // Familiar 2's real rear-up/charge/beam-release windup — a distinct animation from its
+    // ATT cut (the crouch/lunge), not a fallback.
+    familiar2: { n: 24, bust: "" },
   };
   const casts: Partial<Record<SpriteId, HTMLImageElement[]>> = {};
   await Promise.all(
@@ -282,6 +288,10 @@ export async function loadGameArt(): Promise<GameArt> {
   // no walk cut and falls back to its idle loop played faster, as every sprite used to.
   const WALK_FRAMES: Partial<Record<SpriteId, { n: number; bust: string }>> = {
     familiar: { n: 8, bust: "?v=6" },
+    // Right-facing cut; see the dedicated walksLeft.familiar2 load below for its own
+    // authored left-facing cut (real distinct footage, not the CSS mirror every other
+    // sprite absent from walksLeft falls back to).
+    familiar2: { n: 12, bust: "" },
     "ancient-golem": { n: 8, bust: "" },
     malrec: { n: 6, bust: "?v=sheet2" },
     aldric: { n: 36, bust: "?v=aldric-final-001" },
@@ -332,6 +342,12 @@ export async function loadGameArt(): Promise<GameArt> {
   // standalone walksLeft load, attack keeps mirroring the right-facing pool when facing left.
   walksLeft["cultist-v2"] = await Promise.all(
     Array.from({ length: WALK_FRAMES["cultist-v2"]!.n }, (_, i) => loadImage(spriteFrameSrc("cultist-v2", `move-left-${i + 1}`, WALK_FRAMES["cultist-v2"]!.bust))),
+  );
+  // Familiar 2 has real, distinct left-facing walk footage (not a mirrored gait) — same
+  // shape as theButcher/cultist-v2 above: its own standalone walksLeft load, attack keeps
+  // mirroring the right-facing pool when facing left.
+  walksLeft.familiar2 = await Promise.all(
+    Array.from({ length: WALK_FRAMES.familiar2!.n }, (_, i) => loadImage(spriteFrameSrc("familiar2", `move-left-${i + 1}`, WALK_FRAMES.familiar2!.bust))),
   );
   const impact = await Promise.all([1, 2, 3, 4].map((n) => loadImage(`/game/fx/impact-${n}.png`)));
   // v2: real alpha-cutout comet art (ball + trailing wisps), replacing the old flattened
