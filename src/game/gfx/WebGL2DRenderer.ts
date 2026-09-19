@@ -1,18 +1,17 @@
 import { createProgram, createUnitQuad, bindAttrib } from "./glutil";
 
-const VERT_QUAD_2D = `#version 300 es
+const VERT = `#version 300 es
 precision highp float;
 layout(location = 0) in vec2 a_pos;
 uniform mat4 u_matrix;
-uniform vec2 u_resolution;
 out vec2 v_uv;
 void main() {
   v_uv = a_pos * 0.5 + 0.5;
-  gl_Position = u_matrix * vec4(a_pos * 2.0 - 1.0, 0.0, 1.0);
+  gl_Position = u_matrix * vec4(a_pos, 0.0, 1.0);
 }
 `;
 
-const FRAG_TEXTURE = `#version 300 es
+const FRAG_TEX = `#version 300 es
 precision highp float;
 in vec2 v_uv;
 uniform sampler2D u_tex;
@@ -33,41 +32,41 @@ void main() {
 
 export class WebGL2DRenderer {
   private gl: WebGL2RenderingContext;
-  private progTexture: WebGLProgram;
+  private progTex: WebGLProgram;
   private progSolid: WebGLProgram;
   private quadBuf: WebGLBuffer;
   private width: number;
   private height: number;
-  private stack: { matrix: Float32Array }[] = [];
   private matrix: Float32Array = new Float32Array(16);
-  private textureCache = new Map<string, WebGLTexture>();
+  private stack: Float32Array[] = [];
+  private textureCache = new Map<CanvasImageSource, WebGLTexture>();
 
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", { antialias: true, alpha: true });
-    if (!gl) throw new Error("WebGL2 failed");
+    if (!gl) throw new Error("WebGL2 context failed");
 
     this.gl = gl;
     this.width = canvas.width;
     this.height = canvas.height;
     this.quadBuf = createUnitQuad(gl);
+    this.progTex = createProgram(gl, VERT, FRAG_TEX);
+    this.progSolid = createProgram(gl, VERT, FRAG_SOLID);
 
-    this.progTexture = createProgram("tex", VERT_QUAD_2D, FRAG_TEXTURE) || this.progSolid;
-    this.progSolid = createProgram("solid", VERT_QUAD_2D, FRAG_SOLID) || this.progSolid;
-
-    this.setIdentity();
+    this.ortho(0, this.width, this.height, 0);
     gl.viewport(0, 0, this.width, this.height);
     gl.clearColor(0, 0, 0, 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
 
-  private setIdentity() {
-    this.matrix.set([
-      2 / this.width, 0, 0, 0,
-      0, -2 / this.height, 0, 0,
-      0, 0, 1, 0,
-      -1, 1, 0, 1
-    ]);
+  private ortho(left: number, right: number, bottom: number, top: number) {
+    const m = this.matrix;
+    m[0] = 2 / (right - left);
+    m[5] = 2 / (top - bottom);
+    m[10] = -1;
+    m[15] = 1;
+    m[12] = -(right + left) / (right - left);
+    m[13] = -(top + bottom) / (top - bottom);
   }
 
   clear() {
@@ -75,18 +74,26 @@ export class WebGL2DRenderer {
   }
 
   save() {
-    this.stack.push({ matrix: new Float32Array(this.matrix) });
+    this.stack.push(new Float32Array(this.matrix));
   }
 
   restore() {
-    const state = this.stack.pop();
-    if (state) this.matrix.set(state.matrix);
+    const m = this.stack.pop();
+    if (m) this.matrix.set(m);
   }
 
   translate(x: number, y: number) {
     const m = this.matrix;
-    m[12] += x * m[0] + y * m[4];
-    m[13] += x * m[1] + y * m[5];
+    m[12] += x;
+    m[13] += y;
+  }
+
+  scale(sx: number, sy: number) {
+    const m = this.matrix;
+    m[0] *= sx;
+    m[1] *= sx;
+    m[4] *= sy;
+    m[5] *= sy;
   }
 
   rotate(angle: number) {
@@ -96,43 +103,35 @@ export class WebGL2DRenderer {
     const m0 = m[0], m1 = m[1], m4 = m[4], m5 = m[5];
     m[0] = m0 * c + m4 * s;
     m[1] = m1 * c + m5 * s;
-    m[4] = m4 * c - m0 * s;
-    m[5] = m5 * c - m1 * s;
+    m[4] = m0 * -s + m4 * c;
+    m[5] = m1 * -s + m5 * c;
   }
 
-  scale(sx: number, sy: number) {
-    this.matrix[0] *= sx;
-    this.matrix[1] *= sx;
-    this.matrix[4] *= sy;
-    this.matrix[5] *= sy;
-  }
-
-  drawImage(img: HTMLImageElement, x: number, y: number, w: number, h: number) {
+  drawImage(img: CanvasImageSource, x: number, y: number, w: number, h: number) {
     const gl = this.gl;
-    gl.useProgram(this.progTexture);
+    gl.useProgram(this.progTex);
 
     const tex = this.getTexture(img);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.uniform1i(gl.getUniformLocation(this.progTexture, "u_tex"), 0);
+    gl.uniform1i(gl.getUniformLocation(this.progTex, "u_tex"), 0);
 
     this.drawQuad(x, y, w, h);
   }
 
-  fillRect(x: number, y: number, w: number, h: number, color: string = "#000000") {
+  fillRect(x: number, y: number, w: number, h: number, color = "#000000") {
     const gl = this.gl;
     gl.useProgram(this.progSolid);
 
-    const rgb = this.parseColor(color);
-    gl.uniform4f(gl.getUniformLocation(this.progSolid, "u_color"), rgb[0], rgb[1], rgb[2], 1.0);
+    const [r, g, b] = this.parseColor(color);
+    gl.uniform4f(gl.getUniformLocation(this.progSolid, "u_color"), r, g, b, 1.0);
 
     this.drawQuad(x, y, w, h);
   }
 
-  fillText(text: string, x: number, y: number, color: string = "#000000", font: string = "12px Arial") {
-    // Render text to offscreen canvas, then drawImage it
+  fillText(text: string, x: number, y: number, color = "#000000", font = "12px Arial") {
     const canvas = document.createElement("canvas");
-    canvas.width = 256;
+    canvas.width = 512;
     canvas.height = 64;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -149,48 +148,47 @@ export class WebGL2DRenderer {
     const gl = this.gl;
     bindAttrib(gl, this.quadBuf, 0, 2);
 
-    const uMatrix = gl.getUniformLocation(
-      gl.getParameter(gl.CURRENT_PROGRAM),
-      "u_matrix"
-    );
-
-    const m = new Float32Array(16);
-    m.set(this.matrix);
+    const m = new Float32Array(this.matrix);
     m[0] *= w;
     m[4] *= h;
     m[12] += x;
     m[13] += y;
 
-    gl.uniformMatrix4fv(uMatrix, false, m);
+    const prog = gl.getParameter(gl.CURRENT_PROGRAM);
+    gl.uniformMatrix4fv(gl.getUniformLocation(prog, "u_matrix"), false, m);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
-  private getTexture(img: HTMLImageElement): WebGLTexture {
-    const key = img.src;
-    let tex = this.textureCache.get(key);
+  private getTexture(img: CanvasImageSource): WebGLTexture {
+    let tex = this.textureCache.get(img);
     if (!tex) {
-      tex = this.gl.createTexture();
+      const gl = this.gl;
+      tex = gl.createTexture();
       if (!tex) throw new Error("Texture creation failed");
-      this.gl.bindTexture(this.gl.TEXTURE_2D, tex);
-      this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img);
-      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
-      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
-      this.textureCache.set(key, tex);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.textureCache.set(img, tex);
     }
     return tex;
   }
 
-  private parseColor(color: string): [number, number, number] {
-    const hex = color.replace("#", "");
-    const r = parseInt(hex.substring(0, 2), 16) / 255;
-    const g = parseInt(hex.substring(2, 4), 16) / 255;
-    const b = parseInt(hex.substring(4, 6), 16) / 255;
-    return [r, g, b];
+  private parseColor(hex: string): [number, number, number] {
+    const h = hex.replace("#", "");
+    return [
+      parseInt(h.substring(0, 2), 16) / 255,
+      parseInt(h.substring(2, 4), 16) / 255,
+      parseInt(h.substring(4, 6), 16) / 255
+    ];
   }
 
   setSize(w: number, h: number) {
     this.width = w;
     this.height = h;
-    this.setIdentity();
+    this.gl.viewport(0, 0, w, h);
+    this.ortho(0, w, h, 0);
   }
 }
