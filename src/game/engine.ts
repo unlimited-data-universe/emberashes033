@@ -38,6 +38,7 @@ import { sfxPlay } from "./audio";
 // (see BattleCanvas.tsx) implements this instead of a real Path2D, and every `new Path2D()`
 // below (the blade-sweep crescent) needs to build one it understands.
 import { Path2D } from "./gfx/WebGL2DRenderer";
+import type { ElementKind } from "./gfx/params";
 import type {
   Bag,
   BattleSnapshot,
@@ -92,6 +93,19 @@ interface Particle {
 
 const PARTICLE_CAP = 32;
 const ZOOM_RADII = [22, 34, 50, 72];
+
+/** Which WebGL elemental FX shader (see gfx/shaders.ts) a landed spell hit lights up on its
+ * target tile(s), and how long that shader patch lingers (seconds) before it self-expires —
+ * see EffectsRenderer.spawnEffect's `duration` option. Only spells with a clear elemental
+ * theme are listed; anything absent here (melee skills, arrows, heals, ...) queues no FX. */
+const SPELL_ELEMENT_FX: Partial<Record<SpellKind, { kind: ElementKind; duration: number }>> = {
+  fireball: { kind: "fire", duration: 0.9 },
+  causticVenom: { kind: "acid", duration: 1.3 },
+  lightning: { kind: "lightning", duration: 0.45 },
+  lightningTier3: { kind: "lightning", duration: 0.55 },
+  shock: { kind: "lightning", duration: 0.4 },
+  divineWrath: { kind: "holy", duration: 0.9 },
+};
 
 /** Seconds one step of a walk animation takes. Shared by the position and the
  * high-ground lift so a unit's feet and its elevation move on the same clock. */
@@ -876,6 +890,11 @@ export class BattleEngine {
   /** Active Web of Dreams patches (Conjurer tier 2) — cast, not terrain, so they live here
    * rather than on the map. Ticks down by one every startNewRound and is dropped at 0. */
   webZones: { cells: Set<string>; roundsLeft: number; createdAt?: number }[] = [];
+  /** One-shot WebGL elemental FX spawn requests queued by a landed spell hit (see
+   * SPELL_ELEMENT_FX/queueElementalFx) — BattleCanvas's render loop drains this every frame
+   * and calls EffectsRenderer.spawnEffect for each, since `fx` itself only exists over there.
+   * Each request self-expires after its own `duration`, so nothing here needs manual removal. */
+  elementalFxRequests: { kind: ElementKind; x: number; y: number; duration: number }[] = [];
   /** Active Aura of Protection / Intimidating Presence zones (Paladin/Heavy Knight tier 5) —
    * same fixed-cells-at-cast-time, ticks-down-every-round shape as webZones. "protection"
    * cuts damage taken by units on the caster's own side standing in the zone; "intimidation"
@@ -2299,6 +2318,8 @@ export class BattleEngine {
         }
       }
       if (a.spellKind === "fireball" || a.spellKind === "causticVenom") this.emitFireballBurstFx(a.tiles, a.spellKind);
+      const elementFx = a.spellKind ? SPELL_ELEMENT_FX[a.spellKind] : undefined;
+      if (elementFx) this.queueElementalFx(elementFx.kind, a.tiles, elementFx.duration);
       if ((a.spellKind === "cleave" || a.spellKind === "shoulderSmash") && a.tiles.length > 0) {
         const { a0, a1 } = this.arcSweepAngles({ x: att.x, y: att.y }, a.tiles);
         this.emitBladeFx("arc", att.x, att.y, { a0, a1, warm: a.spellKind === "shoulderSmash" });
@@ -2939,6 +2960,14 @@ export class BattleEngine {
     slot.kind = kind;
     slot.seed = this.rng() * Math.PI * 2;
     slot.rays = Array.from({ length: rayCount }, (_, i) => (Math.PI * 2 * i) / rayCount + (this.rng() - 0.5) * 0.18);
+  }
+
+  /** Queues one WebGL elemental FX spawn per target tile, drained by BattleCanvas's render
+   * loop (see elementalFxRequests). Respects reducedMotion the same way every other spell-hit
+   * FX emitter here does. */
+  private queueElementalFx(kind: ElementKind, tiles: Point[], duration: number): void {
+    if (this.reducedMotion) return;
+    for (const t of tiles) this.elementalFxRequests.push({ kind, x: t.x, y: t.y, duration });
   }
 
   /** One burning patch per Fireball area cell, all procedural so it conforms to every map. */
