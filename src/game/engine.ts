@@ -590,10 +590,15 @@ const MAGE_RANGE_BONUS_CLASSES: ReadonlySet<ClassId> = new Set(["mage", "voss", 
 // (stats, spells); only the sprite stays pinned to the hero's identity.
 const HERO_SPRITE_BY_NAME: Partial<Record<string, SpriteId>> = {
   Kael: "kaelFinal",
-  Neera: "nira",
+  Neera: "neera",
   Voss: "voss",
   Salazar: "salazar",
   Aldric: "aldric",
+  // The old "malrec" sheet was permanently deleted (broken bleed-through art from a bad
+  // sprite-sheet slice). This is a fresh slot under his own name, not a fallback to a
+  // shared/generic id — seeded from a clean copy of the finished conjurer art (the only
+  // good art on hand for him) so he has a real, never-shared, personally-named sprite of
+  // his own to replace with dedicated art later.
   Malrec: "malrec",
 };
 
@@ -1792,7 +1797,7 @@ export class BattleEngine {
    * the historical "facing = 1 shows the sheet as drawn" convention. */
   private faceSpriteToward(id: string, x: number): void {
     const u = this.units.find((n) => n.id === id);
-    if (!u || (u.sprite !== "malrec" && u.sprite !== "aldric" && u.sprite !== "defaultLancer" && u.sprite !== "lancer" && u.sprite !== "sandoval" && u.sprite !== "conjurer")) return;
+    if (!u || (u.sprite !== "aldric" && u.sprite !== "defaultLancer" && u.sprite !== "lancer" && u.sprite !== "sandoval" && u.sprite !== "conjurer" && u.sprite !== "malrec")) return;
     if (x > u.x) u.facing = 1;
     else if (x < u.x) u.facing = -1;
   }
@@ -6708,7 +6713,7 @@ export class BattleEngine {
     if (n <= 1 || !a || a.type !== "move" || a.id !== u.id) return 0;
     const dur = this.speedMode === "fast" ? 0.12 : this.speedMode === "slow" ? 0.36 : 0.22;
     const steps = a.i + Math.min(1, a.t / dur);
-    return Math.floor(steps * (n / 2) * (u.sprite === "conjurer" ? 0.9 : 1)) % n;
+    return Math.floor(steps * (n / 2) * (u.sprite === "conjurer" || u.sprite === "malrec" ? 0.9 : 1)) % n;
   }
 
   private idleFrame(u: Unit, n: number): number {
@@ -6730,8 +6735,9 @@ export class BattleEngine {
           : isBossClass(u.classId)
             ? 1.75
             : 1.85;
-    // Conjurer sheets are intentionally 10% slower without slowing its turn or spell logic.
-    const animationRate = u.sprite === "conjurer" ? 0.9 : 1;
+    // Conjurer sheets (and Malrec's own, the same 36-frame data) are intentionally 10%
+    // slower without slowing turn or spell logic.
+    const animationRate = u.sprite === "conjurer" || u.sprite === "malrec" ? 0.9 : 1;
     const rate = base * (moving ? 2.2 : 1) * animationRate;
     if (moving || this.reducedMotion) return Math.floor(u.bob * rate) % n;
     const cycle = Math.max(2, n * 2 - 2);
@@ -6749,7 +6755,7 @@ export class BattleEngine {
     // and jumps to the next stage's start the instant the real timer crosses over — a
     // visible skip, and a jump straight to a differently-cropped frame if the sheet's
     // per-frame crop isn't perfectly uniform (the "size change" this was causing).
-    const pace = u.sprite === "conjurer" ? 0.9 : 1;
+    const pace = u.sprite === "conjurer" || u.sprite === "malrec" ? 0.9 : 1;
     const animationT = a.t * pace;
     // A dedicated cast pose (currently just Birolho's cast-*.png), for a spell or heal only —
     // falls back to the melee attacks cut for every sprite without one, same as before this
@@ -6766,8 +6772,9 @@ export class BattleEngine {
         return 3;
       }
       // The Conjurer's authored 36-frame casting sequence needs a readable lead-in;
-      // other casters retain the established timing.
-      const castDuration = u.sprite === "conjurer" ? 0.65 : 0.4;
+      // other casters retain the established timing. Malrec's own cast-*.png is a copy
+      // of that same sequence, so it needs the same lead-in.
+      const castDuration = u.sprite === "conjurer" || u.sprite === "malrec" ? 0.65 : 0.4;
       return Math.min(n - 1, Math.floor(Math.min(0.99, animationT / castDuration) * n));
     }
     if (a.type === "combat") {
@@ -6835,7 +6842,7 @@ export class BattleEngine {
       };
     }
     const heavy = u.size >= 4 ? 1.4 : u.size === 2 ? 1.12 : 1;
-    if (u.sprite === "kael" || u.sprite === "kaelEarly" || u.sprite === "malrec" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "conjurer" || u.size >= 4) {
+    if (u.sprite === "kael" || u.sprite === "kaelEarly" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "conjurer" || u.sprite === "malrec" || u.size >= 4) {
       return { bob: 0, sway: 0, breath: 0 };
     }
     const bob = Math.sin(t * 1.55) * (1.15 * heavy);
@@ -7362,8 +7369,37 @@ export class BattleEngine {
       // noticeably taller/bulkier than Kael/Neera/Voss standing next to it.
       const isCultistV2 = u.classId === "cultistV2" || u.sprite === "cultist-v2";
       const spriteScale = isLancer ? 1.4 : isSandoval ? 1.2 : isFamiliar ? 0.5 : isKaelFinal ? 0.9 : isCultistV2 ? 0.8 : 1;
-      const h = cell * (s >= 4 ? 3.35 : s === 2 ? 1.72 : boss ? 1.44 : 1.42) * 1.2 * (isBigCreatureFootprint ? 0.75 : 1) * spriteScale;
-      const w = cell * (s >= 4 ? 2.85 : s === 2 ? 1.85 : boss ? 1.12 : 1.11) * 1.2 * (isBigCreatureFootprint ? 0.75 : 1) * spriteScale;
+      // Familiar 2's own cut is a landscape 1400x704 canvas (the creature spans its arms wide,
+      // filling maybe half the canvas width but most of its height) — every other sprite's
+      // source is portrait-ish and roughly fills its own frame, which is what the shared
+      // w/h ratio below (1.11:1.42) assumes. Drawing this canvas through that same
+      // portrait-shaped box squeezes the wide source down hard, which is what was reading as
+      // both "too small" (the creature shrinks along with its own padding) and "pixelated"
+      // (a 1400px-wide source aggressively downscaled into a narrow box aliases badly).
+      // Widening just this sprite's box independently of spriteScale (which still scales height
+      // normally) fixes both without touching any other sprite's sizing. Verified against the
+      // real sprite file with a standalone render, not tuned blind.
+      const familiar2WidthMul = u.sprite === "familiar2" ? 1.9 : 1;
+      // Cultist V2's cast-*.png cut is its own separate export from atk-*.png/idle, on a
+      // taller canvas (358x640 vs 360x570/580) with the character cropped noticeably looser
+      // inside it — measured directly off the files (bounding-box scan of the actual PNG
+      // alpha, not eyeballed): idle/attack fill ~85-99% of their own canvas height, the cast
+      // cut only ~75%. Drawn through the same fixed box as everything else, that read as the
+      // character suddenly shrinking the instant a cast animation started. 1.32/1.12 bring
+      // the cast cut's effective on-screen size back to roughly match idle/attack's.
+      // cast-27.png alone measured ~11% bigger content than its cast-cut neighbors — a real
+      // inconsistency baked into that one source frame, not something a single scale
+      // constant here can fix; left as a known residual wobble on that frame specifically.
+      const isCultistV2Casting = isCultistV2 && casting;
+      const cultistV2CastHeightMul = isCultistV2Casting ? 1.32 : 1;
+      const cultistV2CastWidthMul = isCultistV2Casting ? 1.12 : 1;
+      const h = cell * (s >= 4 ? 3.35 : s === 2 ? 1.72 : boss ? 1.44 : 1.42) * 1.2 * (isBigCreatureFootprint ? 0.75 : 1) * spriteScale * cultistV2CastHeightMul;
+      const w = cell * (s >= 4 ? 2.85 : s === 2 ? 1.85 : boss ? 1.12 : 1.11) * 1.2 * (isBigCreatureFootprint ? 0.75 : 1) * spriteScale * familiar2WidthMul * cultistV2CastWidthMul;
+      // The cast cut's own content also sits higher inside its canvas than idle/attack's does
+      // (feet reach only ~87% of the way down vs idle's ~99%) — without this, boosting h above
+      // would float the feet even further off the ground than they already subtly are. Shifts
+      // the whole draw down by that measured gap so the feet land back on the anchor point.
+      const cultistV2CastFootOffset = isCultistV2Casting ? h * 0.127 : 0;
       // Big creatures plant their feet at the bottom corner of their front hex (tile * 0.9,
       // matching the hex outline radius used elsewhere) instead of the smaller offset tuned
       // for normal-size sprites, so the feet don't float above the tile they stand on.
@@ -7378,15 +7414,15 @@ export class BattleEngine {
       // half of this check. cultist-v2 was missing from here entirely before: its own
       // dedicated left-facing footage was getting mirrored a second time on top of itself
       // while facing left, which is what actually read as "walking backwards" for it.
-      const dirActionWalk = (u.sprite === "malrec" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "theButcher" || u.sprite === "familiar2" || u.sprite === "cultist-v2") && moving;
-      const dirActionAttack = (u.sprite === "malrec" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval") && atk != null;
+      const dirActionWalk = (u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "theButcher" || u.sprite === "familiar2" || u.sprite === "cultist-v2") && moving;
+      const dirActionAttack = (u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval") && atk != null;
       const dirAction = dirActionWalk || dirActionAttack;
       // The familiar's art is drawn facing left by default — the opposite of every other
       // sprite's "facing 1 shows the sheet as drawn" convention — so its mirror has to run
       // backwards from u.facing or it walks left while visually facing right and vice versa.
       const facing = u.classId === "familiar" ? -u.facing : u.facing;
       const flip = dirAction ? 1 : facing;
-      if (u.sprite === "kael" || u.sprite === "kaelEarly" || u.sprite === "malrec" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "conjurer") ctx.scale(flip, 1);
+      if (u.sprite === "kael" || u.sprite === "kaelEarly" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "conjurer" || u.sprite === "malrec") ctx.scale(flip, 1);
       else ctx.scale(flip * (1 - breath * 0.22), 1 + breath);
       if (u.levelGlow > 0) {
         const pulse = 0.75 + Math.sin(this.time * 7) * 0.25;
@@ -7418,7 +7454,7 @@ export class BattleEngine {
         ctx.shadowBlur = w * (u.healGlowKind === "holyMedium" ? 0.48 : 0.32) * u.healGlow * pulse;
       }
       if (u.flash > 0) ctx.filter = `brightness(${1.8 + u.flash})`;
-      if (img) ctx.drawImage(img, -w / 2, -h, w, h);
+      if (img) ctx.drawImage(img, -w / 2, -h + cultistV2CastFootOffset, w, h);
       else {
         ctx.fillStyle = u.side === "player" ? "#8a97a1" : u.side === "neutral" ? "#5f8a58" : "#a35a4a";
         ctx.fillRect(-w / 2, -h, w, h);
@@ -7429,14 +7465,14 @@ export class BattleEngine {
       if (u.levelGlow > 0 && img) {
         const pulse = 0.75 + Math.sin(this.time * 7) * 0.25;
         ctx.shadowBlur = w * 0.55 * u.levelGlow * pulse;
-        ctx.drawImage(img, -w / 2, -h, w, h);
+        ctx.drawImage(img, -w / 2, -h + cultistV2CastFootOffset, w, h);
       }
       if (u.healGlow > 0 && img) {
         const pulse = 0.8 + Math.sin(this.time * 5) * 0.2;
         const halo = this.healHaloRgb(u.healGlowKind);
         ctx.shadowColor = `rgba(${halo.core},${0.88 * u.healGlow})`;
         ctx.shadowBlur = w * (u.healGlowKind === "holyMedium" ? 0.58 : 0.42) * u.healGlow * pulse;
-        ctx.drawImage(img, -w / 2, -h, w, h);
+        ctx.drawImage(img, -w / 2, -h + cultistV2CastFootOffset, w, h);
       }
       this.drawStatusFx(ctx, u, w, h);
       ctx.filter = "none";

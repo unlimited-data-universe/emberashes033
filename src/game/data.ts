@@ -591,7 +591,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     size: 1,
     init: 7,
   },
-  // sprite is "archerRecruit", NOT "nira" — that's Neera the MC's own sprite. See the
+  // sprite is "archerRecruit", NOT "neera" — that's Neera the MC's own sprite. See the
   // SpriteId comment in types.ts: this generic enemy (and its own promotions, ranger/
   // assassin) gets its own alternate slot so it never shares Neera's unit ID.
   archer: {
@@ -1102,7 +1102,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 6,
     minRange: 2,
     maxRange: 4,
-    sprite: "nira",
+    sprite: "neera",
     size: 1,
     init: 3,
   },
@@ -1332,7 +1332,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     size: 1,
     init: 8,
   },
-  // sprite is "archerRecruit", NOT "nira" — see CLASSES.archer above; a promoted generic
+  // sprite is "archerRecruit", NOT "neera" — see CLASSES.archer above; a promoted generic
   // Archer enemy stays on the same alternate slot, never Neera's own.
   ranger: {
     id: "ranger",
