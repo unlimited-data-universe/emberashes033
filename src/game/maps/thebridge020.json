@@ -2035,42 +2035,42 @@
       },
       {
         "name": "Inimigo 2",
-        "classId": "lancer",
+        "classId": "pikeman",
         "x": 27,
         "y": 7,
         "level": 2
       },
       {
         "name": "Inimigo 3",
-        "classId": "lancer",
+        "classId": "pikeman",
         "x": 25,
         "y": 11,
         "level": 2
       },
       {
         "name": "Inimigo 4",
-        "classId": "lancer",
+        "classId": "pikeman",
         "x": 20,
         "y": 7,
         "level": 2
       },
       {
         "name": "Inimigo 5",
-        "classId": "lancer",
+        "classId": "pikeman",
         "x": 17,
         "y": 10,
         "level": 2
       },
       {
         "name": "Inimigo 6",
-        "classId": "lancer",
+        "classId": "pikeman",
         "x": 17,
         "y": 4,
         "level": 2
       },
       {
         "name": "Inimigo 7",
-        "classId": "lancer",
+        "classId": "pikeman",
         "x": 26,
         "y": 1,
         "level": 2
