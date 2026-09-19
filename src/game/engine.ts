@@ -6816,7 +6816,7 @@ export class BattleEngine {
    * layer from the ground (see BattleCanvas's WebGL elemental-FX overlay, which needs to
    * insert itself between the two) calls renderGround and renderUnitsAndOverlays directly
    * instead of this. */
-  render(ctx: CanvasRenderingContext2D, cssW: number, cssH: number, dpr: number): void {
+  render(ctx: any, cssW: number, cssH: number, dpr: number): void {
     this.renderGround(ctx, cssW, cssH, dpr);
     this.renderUnitsAndOverlays(ctx, cssW, cssH);
   }
@@ -6824,7 +6824,7 @@ export class BattleEngine {
   /** Tiles, decorations, terrain-rule overlays (walk/attack/spell range highlights, the
    * active-turn glow, the hover cursor) — everything at or below "ground level". Opens this
    * frame's screen-shake transform but does not close it here (see renderUnitsAndOverlays). */
-  renderGround(ctx: CanvasRenderingContext2D, cssW: number, cssH: number, dpr: number): void {
+  renderGround(ctx: any, cssW: number, cssH: number, dpr: number): void {
     // Cheap no-op unless the party moved since the last frame — see refreshVisibility.
     // Sitting here means anything drawn, and anything the HUD reads off this engine,
     // is deciding against current sight rather than last turn's.
@@ -7122,7 +7122,7 @@ export class BattleEngine {
    * drawn on top of renderGround's output. Re-applies this frame's screen-shake offset (see
    * frameShakeDx/Dy) independently rather than sharing one still-open ctx.save() with
    * renderGround, since the two may be drawing onto two different canvases. */
-  renderUnitsAndOverlays(ctx: CanvasRenderingContext2D, cssW: number, cssH: number): void {
+  renderUnitsAndOverlays(ctx: any, cssW: number, cssH: number): void {
     const tile = ZOOM_RADII[this.zoom]!;
     const sqrt3 = Math.sqrt(3);
     const shake = this.reducedMotion ? 0 : this.trauma * this.trauma;

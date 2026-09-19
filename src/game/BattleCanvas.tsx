@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { WEB_SHOT_TRAVEL, type BattleEngine } from "./engine";
 import { EffectsRenderer } from "./gfx/EffectsRenderer";
+import { WebGL2DRenderer } from "./gfx/WebGL2DRenderer";
 import type { HudSnapshot } from "./types";
 
 export function BattleCanvas({
@@ -28,8 +29,12 @@ export function BattleCanvas({
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    let renderer: WebGL2DRenderer;
+    try {
+      renderer = new WebGL2DRenderer(canvas);
+    } catch {
+      return;
+    }
     // Units, HP bars, particles and foreground decorations get their own transparent canvas
     // stacked ABOVE the FX canvas (see below), instead of being part of the ground canvas the
     // FX layer reads as its "scene" — otherwise a unit or decoration standing on/near a Water
@@ -38,7 +43,14 @@ export function BattleCanvas({
     // of draw order. Splitting the ground and unit passes onto their own canvases (see
     // BattleEngine.renderGround/renderUnitsAndOverlays) puts a real layer boundary between them.
     const unitsCanvas = unitsCanvasRef.current;
-    const unitsCtx = unitsCanvas?.getContext("2d") ?? null;
+    let unitsRenderer: WebGL2DRenderer | null = null;
+    if (unitsCanvas) {
+      try {
+        unitsRenderer = new WebGL2DRenderer(unitsCanvas);
+      } catch {
+        unitsRenderer = null;
+      }
+    }
     (window as Window & { __emberEngine?: BattleEngine }).__emberEngine = engine;
 
     // Permanent map-authored elemental FX (lava fire, icy glints, ...) placed in the editor's
@@ -117,20 +129,24 @@ export function BattleCanvas({
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = wrap.clientWidth;
       const h = wrap.clientHeight;
-      canvas.width = Math.max(1, Math.floor(w * dpr));
-      canvas.height = Math.max(1, Math.floor(h * dpr));
+      const pw = Math.max(1, Math.floor(w * dpr));
+      const ph = Math.max(1, Math.floor(h * dpr));
+      canvas.width = pw;
+      canvas.height = ph;
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
+      renderer.setSize(pw, ph);
       if (fxCanvas) {
         fx?.resize(w, h, dpr);
         fxCanvas.style.width = `${w}px`;
         fxCanvas.style.height = `${h}px`;
       }
-      if (unitsCanvas) {
-        unitsCanvas.width = Math.max(1, Math.floor(w * dpr));
-        unitsCanvas.height = Math.max(1, Math.floor(h * dpr));
+      if (unitsCanvas && unitsRenderer) {
+        unitsCanvas.width = pw;
+        unitsCanvas.height = ph;
         unitsCanvas.style.width = `${w}px`;
         unitsCanvas.style.height = `${h}px`;
+        unitsRenderer.setSize(pw, ph);
       }
     };
     resize();
@@ -156,7 +172,8 @@ export function BattleCanvas({
         engine.tick(dt);
       }
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      engine.renderGround(ctx, wrap.clientWidth, wrap.clientHeight, dpr);
+      renderer.clear();
+      engine.renderGround(renderer, wrap.clientWidth, wrap.clientHeight, dpr);
       if (fx) {
         // Dreaming Web's floor patch: one "web" WebGL effect per hex currently inside any live
         // web zone, added/removed to track engine.webZones exactly — the only elemental FX kind
@@ -226,10 +243,10 @@ export function BattleCanvas({
       // Drawn on its own transparent canvas above the FX layer, so units/HP-bars/foreground
       // decorations always read in front of a Water/Fire/etc placement instead of being
       // whatever the FX's snapshot happened to catch underneath it.
-      if (unitsCtx && unitsCanvas) {
-        unitsCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        unitsCtx.clearRect(0, 0, wrap.clientWidth, wrap.clientHeight);
-        engine.renderUnitsAndOverlays(unitsCtx, wrap.clientWidth, wrap.clientHeight);
+      if (unitsRenderer && unitsCanvas) {
+        unitsRenderer.setTransform(dpr, 0, 0, dpr, 0, 0);
+        unitsRenderer.clear();
+        engine.renderUnitsAndOverlays(unitsRenderer, wrap.clientWidth, wrap.clientHeight);
       }
       const hud = engine.getHud();
       const k = [

@@ -39,7 +39,10 @@ export class WebGL2DRenderer {
   private height: number;
   private matrix: Float32Array = new Float32Array(16);
   private stack: Float32Array[] = [];
+  private stateStack: Array<{ matrix: Float32Array; fillStyle: string; globalAlpha: number }> = [];
   private textureCache = new Map<CanvasImageSource, WebGLTexture>();
+  fillStyle = "#000000";
+  globalAlpha = 1.0;
 
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", { antialias: true, alpha: true });
@@ -74,12 +77,32 @@ export class WebGL2DRenderer {
   }
 
   save() {
-    this.stack.push(new Float32Array(this.matrix));
+    this.stateStack.push({
+      matrix: new Float32Array(this.matrix),
+      fillStyle: this.fillStyle,
+      globalAlpha: this.globalAlpha,
+    });
   }
 
   restore() {
-    const m = this.stack.pop();
-    if (m) this.matrix.set(m);
+    const state = this.stateStack.pop();
+    if (state) {
+      this.matrix.set(state.matrix);
+      this.fillStyle = state.fillStyle;
+      this.globalAlpha = state.globalAlpha;
+    }
+  }
+
+  setTransform(a: number, b: number, c: number, d: number, e: number, f: number) {
+    this.matrix = new Float32Array(16);
+    this.ortho(0, this.width, this.height, 0);
+    const m = this.matrix;
+    m[0] = a;
+    m[1] = b;
+    m[4] = c;
+    m[5] = d;
+    m[12] = e;
+    m[13] = f;
   }
 
   translate(x: number, y: number) {
@@ -119,12 +142,13 @@ export class WebGL2DRenderer {
     this.drawQuad(x, y, w, h);
   }
 
-  fillRect(x: number, y: number, w: number, h: number, color = "#000000") {
+  fillRect(x: number, y: number, w: number, h: number, color?: string) {
     const gl = this.gl;
     gl.useProgram(this.progSolid);
 
-    const [r, g, b] = this.parseColor(color);
-    gl.uniform4f(gl.getUniformLocation(this.progSolid, "u_color"), r, g, b, 1.0);
+    const fillColor = color ?? this.fillStyle;
+    const [r, g, b] = this.parseColor(fillColor);
+    gl.uniform4f(gl.getUniformLocation(this.progSolid, "u_color"), r, g, b, this.globalAlpha);
 
     this.drawQuad(x, y, w, h);
   }
@@ -190,5 +214,21 @@ export class WebGL2DRenderer {
     this.height = h;
     this.gl.viewport(0, 0, w, h);
     this.ortho(0, w, h, 0);
+  }
+
+  clearRect(x: number, y: number, w: number, h: number) {
+    this.fillRect(x, y, w, h, "rgba(0,0,0,0)");
+  }
+
+  fill() {
+    // No-op for now; hexPath clipping is not supported in WebGL backend
+  }
+
+  stroke() {
+    // No-op for now; path stroking is not supported in WebGL backend
+  }
+
+  clip() {
+    // No-op for now; clipping paths are not supported in WebGL backend
   }
 }
