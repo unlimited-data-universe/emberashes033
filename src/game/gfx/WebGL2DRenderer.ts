@@ -636,11 +636,15 @@ export class WebGL2DRenderer {
         // highlights — many adjacent, mostly-opaque hexes, each contributing its own rings —
         // they used to stack (especially under "lighter" additive blending) into a much
         // brighter wash than the shape's own shadowColor alpha would ever produce natively.
+        // Cut again after a second report that the hex move-range/target highlight glow
+        // still reads as too bright — these weights are now roughly a quarter of the
+        // original approximation, since that highlight is the worst case for stacking
+        // (many adjacent, mostly-opaque hexes each contributing their own rings).
         const ref = Math.max(bounds.w, bounds.h, 1);
         const rings: Array<[number, number]> = [
-          [1 + (this.shadowBlur / ref) * 1.1, 0.05],
-          [1 + (this.shadowBlur / ref) * 0.55, 0.1],
-          [1 + (this.shadowBlur / ref) * 0.22, 0.16],
+          [1 + (this.shadowBlur / ref) * 0.8, 0.02],
+          [1 + (this.shadowBlur / ref) * 0.4, 0.04],
+          [1 + (this.shadowBlur / ref) * 0.16, 0.07],
         ];
         for (const [scaleMul, weight] of rings) draw(scaleMul, [r, g, b, 1], a * weight);
       }

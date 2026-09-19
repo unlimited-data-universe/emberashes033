@@ -7216,7 +7216,11 @@ export class BattleEngine {
       const isSandoval = u.classId === "sandoval" || u.sprite === "sandoval";
       const isFamiliar = u.classId === "familiar" || u.sprite === "familiar";
       const isKaelFinal = u.sprite === "kaelFinal";
-      const spriteScale = isLancer ? 1.4 : isSandoval ? 1.2 : isFamiliar ? 0.5 : isKaelFinal ? 0.9 : 1;
+      // Cultist V2's art is cropped tighter to its own canvas than the other human sprites
+      // (fills more of both width and height), so at the shared default scale it reads
+      // noticeably taller/bulkier than Kael/Neera/Voss standing next to it.
+      const isCultistV2 = u.classId === "cultistV2" || u.sprite === "cultist-v2";
+      const spriteScale = isLancer ? 1.4 : isSandoval ? 1.2 : isFamiliar ? 0.5 : isKaelFinal ? 0.9 : isCultistV2 ? 0.8 : 1;
       const h = cell * (s >= 4 ? 3.35 : s === 2 ? 1.72 : boss ? 1.44 : 1.42) * 1.2 * (isBigCreatureFootprint ? 0.75 : 1) * spriteScale;
       const w = cell * (s >= 4 ? 2.85 : s === 2 ? 1.85 : boss ? 1.12 : 1.11) * 1.2 * (isBigCreatureFootprint ? 0.75 : 1) * spriteScale;
       // Big creatures plant their feet at the bottom corner of their front hex (tile * 0.9,
