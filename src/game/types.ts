@@ -87,8 +87,21 @@ export type ClassId =
   // Conjurer tier 1 (Summon Familiar): not a recruitable class — its combat stats are
   // computed live from its summoner (see castSummonFamiliar), CLASSES.familiar only
   // supplies a sprite/size/range fallback and satisfies the ClassId-keyed tables below.
-  | "familiar";
-export type SpriteId = "kael" | "nira" | "voss" | "salazar" | "malrec" | "aldric" | "defaultLancer" | "soldier" | "brigand" | "captain" | "sorcerer" | "horror" | "Asherah" | "pikeman" | "wardog" | "troll" | "morvenian-wolf" | "punisher" | "theButcher" | "birolho" | "birolho2" | "birolho3" | "familiar" | "swamp-blue-calf" | "ancient-golem" | "lancer" | "sandoval" | "kaelFinal" | "kaelEarly" | "conjurer" | "cultist-v2";
+  | "familiar"
+  // Stronger evolution of the same summon, cast once the conjurer has promoted (level 15+,
+  // sorcerer/necromancer) — see castSummonFamiliar. Same "stats computed live, this is only
+  // a fallback" deal as "familiar" above.
+  | "familiar2";
+export type SpriteId = "kael" | "neera" | "voss" | "salazar" | "aldric" | "malrec" | "defaultLancer" | "soldier" | "brigand" | "captain" | "sorcerer" | "horror" | "Asherah" | "pikeman" | "wardog" | "troll" | "morvenian-wolf" | "punisher" | "theButcher" | "birolho" | "birolho2" | "birolho3" | "familiar" | "familiar2" | "swamp-blue-calf" | "ancient-golem" | "lancer" | "sandoval" | "kaelFinal" | "kaelEarly" | "conjurer" | "cultist-v2"
+  // Generic-enemy "alter" sprites, split off so a plain Archer/Mage/Healer enemy (and their
+  // own promotions) never renders as literally the same SpriteId as Neera/Voss/Salazar the
+  // MCs — see HERO_SPRITE_BY_NAME/CLASSES in engine.ts/data.ts. Each starts as a straight
+  // file copy of the hero's own art (archerRecruit/mageRecruit/healerRecruit folders under
+  // public/game/sprites/), a placeholder slot ready to be replaced with real dedicated art
+  // later without any further code changes.
+  | "archerRecruit"
+  | "mageRecruit"
+  | "healerRecruit";
 export type HealId = "cureMinor" | "cureWounds" | "cureLight";
 export type SpellKind =
   | "fireball"
@@ -106,6 +119,7 @@ export type SpellKind =
   | "sweep"
   | "trip"
   | "summonFamiliar"
+  | "summonFamiliar2"
   | "webOfDreams"
   | "multiShot"
   | "secondWind"
@@ -693,7 +707,7 @@ export interface HudSnapshot {
    * wants and how many are already chosen. Null when nothing is waiting on a pick. */
   targetPrompt: { name: string; need: number; picked: number } | null;
   zoom: number;
-  speedMode: "normal" | "fast";
+  speedMode: "slow" | "normal" | "fast";
   tip: string | null;
   inspected: UnitPublic | null;
   pendingFoe: UnitPublic | null;

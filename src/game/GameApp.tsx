@@ -9,7 +9,7 @@ import { InnScreen } from "./InnScreen";
 import { PartyInventoryOverlay, ItemTip } from "./InventoryScreens";
 import { DialogOverlay } from "./DialogOverlay";
 import { DialogEditor } from "./DialogEditor";
-import { BARRICADE_LIKE_DECOR, BIG_HOUSE_DECOR_IDS, CAUSTIC_VENOM, CHEST_LOOT, CLASSES, DEADWOODS_DECOR_IDS, CLEAVE, cleaveFormula, CURE_DISEASE, CURES, DECORATIONS, DOUBLE_STRIKE, doubleStrikeFormula, EQUIPMENT, EXP_TO_LEVEL, FIREBALL, formatSpellUseGains, HOUSE_DECOR_IDS, KILL_DROP_CHANCE, LIGHTNING, LIGHTNING_T3, LONG_SHOT, longShotFormula, MAGIC_MISSILE, PIERCING, piercingMul, PIERCING_THRUST, MAX_GRID, MAX_LEVEL, MIN_GRID, POTIONS, POTION_LOOT_WEIGHT, PROMOTE_LEVEL, PROMOTED_BASE, PROMOTIONS, rulesClass, SHOCK, STAT_POINTS_PER_LEVEL, SUMMON_FAMILIAR, SWEEP, TRIP, TERRAIN, WEAPONS, WEAPON_MAX_ENH, WEB_OF_DREAMS, BAG_MAX, LOCKPICK_PRICE, POTION_CARRY_MAX, POTION_PRICE, RATION_STACK_MAX, RATIONS_PRICE, barricadeDecor, decorationCells, placedFootprint, decorationImage, diceFormula, emberForKill, enemyLevelFor, equippedPouchId, fireballFormula, healFormula, lightningFormula, lightningTier3Formula, dressMap, isSummonClass, MUSIC_TRACKS, SUMMON_CLASSES, parseLayout, potionLabel, potionTooltip, lockpickTooltip, partyBagHasRoom, pouchIcon, rangeLabel, rollPotion, sheetLine, spellFormula, spellIcon, spellTier, spellUseGains, startingBags, statsFor, terrainNote, tierKey, tierUses, weaponEnhCost, weaponSellValue, equipmentFitsSlot, gearStatBonus, MULTI_SHOT, multiShotFormula, SECOND_WIND, secondWindPct, auraPower, AURA_OF_PROTECTION, INTIMIDATING_PRESENCE, DIVINE_WRATH, divineWrathPower, SHOULDER_SMASH, shoulderSmashFormula, STAMPEDE, stampedeFormula, type SpellTier } from "./data";
+import { BARRICADE_LIKE_DECOR, BIG_HOUSE_DECOR_IDS, CAUSTIC_VENOM, CHEST_LOOT, CLASSES, DEADWOODS_DECOR_IDS, CLEAVE, cleaveFormula, CURE_DISEASE, CURES, DECORATIONS, DOUBLE_STRIKE, doubleStrikeFormula, EQUIPMENT, EXP_TO_LEVEL, FIREBALL, formatSpellUseGains, HOUSE_DECOR_IDS, KILL_DROP_CHANCE, LIGHTNING, LIGHTNING_T3, LONG_SHOT, longShotFormula, MAGIC_MISSILE, PIERCING, piercingMul, PIERCING_THRUST, MAX_GRID, MAX_LEVEL, MIN_GRID, POTIONS, POTION_LOOT_WEIGHT, PROMOTE_LEVEL, PROMOTED_BASE, PROMOTIONS, rulesClass, SHOCK, STAT_POINTS_PER_LEVEL, SUMMON_FAMILIAR, SUMMON_FAMILIAR2, SWEEP, TRIP, TERRAIN, WEAPONS, WEAPON_MAX_ENH, WEB_OF_DREAMS, BAG_MAX, LOCKPICK_PRICE, POTION_CARRY_MAX, POTION_PRICE, RATION_STACK_MAX, RATIONS_PRICE, barricadeDecor, decorationCells, placedFootprint, decorationImage, diceFormula, emberForKill, enemyLevelFor, equippedPouchId, fireballFormula, healFormula, lightningFormula, lightningTier3Formula, dressMap, isSummonClass, MUSIC_TRACKS, SUMMON_CLASSES, parseLayout, potionLabel, potionTooltip, lockpickTooltip, partyBagHasRoom, pouchIcon, rangeLabel, rollPotion, sheetLine, spellFormula, spellIcon, spellTier, spellUseGains, startingBags, statsFor, terrainNote, tierKey, tierUses, weaponEnhCost, weaponSellValue, equipmentFitsSlot, gearStatBonus, MULTI_SHOT, multiShotFormula, SECOND_WIND, secondWindPct, auraPower, AURA_OF_PROTECTION, INTIMIDATING_PRESENCE, DIVINE_WRATH, divineWrathPower, SHOULDER_SMASH, shoulderSmashFormula, STAMPEDE, stampedeFormula, type SpellTier } from "./data";
 import { BattleEngine } from "./engine";
 import { MapPreviewCanvas, type PreviewUnitSelection } from "./MapPreviewCanvas";
 import { WorldMapScreen } from "./WorldMapScreen";
@@ -381,8 +381,10 @@ function classSpells(classId: ClassId): SpellKind[] {
         return ["magicMissile", "lightning", "fireball", "causticVenom"];
       case "conjurer":
         // Phantasmal Force / Summon Swarm (tiers 3-4) join this list as they're built — see
-        // SPELL_TIER for the intended tier assignment.
-        return ["summonFamiliar", "webOfDreams"];
+        // SPELL_TIER for the intended tier assignment. summonFamiliar2 (Familiar Maior) is
+        // the first case of a class having more than one spell at the same tier (both tier
+        // 2, sharing that tier's pool of uses with webOfDreams).
+        return ["summonFamiliar", "webOfDreams", "summonFamiliar2"];
       case "archer":
         return ["longShot", "piercing", "multiShot"];
       case "healer":
@@ -461,6 +463,9 @@ function slotIcon(action: SlotAction): string {
       return spellIcon("trip");
     case "summonFamiliar":
       return spellIcon("summon-familiar");
+    // No dedicated art yet for the tier-2 summon — reuses the same familiar icon.
+    case "summonFamiliar2":
+      return spellIcon("summon-familiar");
     case "webOfDreams":
       return spellIcon("web-of-dreams");
     // No dedicated art exists yet for any of these — each reuses an existing icon whose
@@ -521,6 +526,8 @@ function slotLabel(action: SlotAction): string {
       return TRIP.name;
     case "summonFamiliar":
       return SUMMON_FAMILIAR.name;
+    case "summonFamiliar2":
+      return SUMMON_FAMILIAR2.name;
     case "webOfDreams":
       return WEB_OF_DREAMS.name;
     case "multiShot":
@@ -2193,6 +2200,7 @@ const SKILL_CLASS: Partial<Record<SpellKind, ClassId>> = {
   fireball: "mage",
   causticVenom: "mage",
   summonFamiliar: "conjurer",
+  summonFamiliar2: "conjurer",
   webOfDreams: "conjurer",
   longShot: "archer",
   piercing: "archer",
@@ -2233,6 +2241,7 @@ const SKILL_DAMAGE_ROWS: { name: string; cls: ClassId; tier: SpellTier; formula:
   },
   { name: PIERCING_THRUST.name, cls: SKILL_CLASS.piercingThrust!, tier: spellTier("piercingThrust")!, formula: `dano de arma, −${Math.round(PIERCING_THRUST.armorIgnore * 100)}% armadura`, note: "Acerta em linha; o segundo alvo recebe metade." },
   { name: SUMMON_FAMILIAR.name, cls: SKILL_CLASS.summonFamiliar!, tier: spellTier("summonFamiliar")!, formula: "—", note: `Invoca aliado com ${Math.round(SUMMON_FAMILIAR.statScale * 100)}% dos atributos atuais.` },
+  { name: SUMMON_FAMILIAR2.name, cls: SKILL_CLASS.summonFamiliar2!, tier: spellTier("summonFamiliar2")!, formula: "—", note: `Invoca aliado maior, com ${Math.round(SUMMON_FAMILIAR2.statScale * 100)}% dos atributos atuais.` },
   {
     name: LIGHTNING.name,
     cls: SKILL_CLASS.lightning!,
@@ -2667,15 +2676,22 @@ const DEFAULT_TEST_LEVEL = 10;
 /** One canonical scenario prefix everywhere: the editor's ID becomes the exact file prefix.
  * `Vau 01` therefore saves as `vau-01001.json` only if the author actually made the ID
  * `vau-01`; the trailing three digits are always the generated save serial. */
-function normalizeScenarioId(value: string): string {
-  const id = value
+/** The id input's live typing: lowercases and collapses invalid characters as the author types,
+ * but never trims a trailing "-" (typing "vau-" mid-word would otherwise have it eaten before
+ * the next letter lands) and never falls back to a default for an empty value (clearing the
+ * field to type a new name must actually leave it blank, not snap back to "scenario"). Both of
+ * those only get applied by normalizeScenarioId below, at the point an id is actually saved. */
+function stripScenarioId(value: string): string {
+  return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
     .slice(0, 64);
-  return id || "scenario";
+}
+
+function normalizeScenarioId(value: string): string {
+  return stripScenarioId(value).replace(/^-+|-+$/g, "") || "scenario";
 }
 
 /** Finds the ground that should reappear when a terrain-changing decoration is removed.
@@ -3963,10 +3979,16 @@ function MapEditorScreen({
   // search in a dropdown. pt-BR collation so accents and case sort where a reader expects.
   const classOptions = (Object.keys(CLASSES) as ClassId[]).sort((a, b) => byName(CLASSES[a].name, CLASSES[b].name));
   const summonOptions = [...SUMMON_CLASSES].sort((a, b) => byName(CLASSES[a].name, CLASSES[b].name));
+  // A hero-identity classId (aldric, kaelFinal, conjurer, ...) deliberately keeps the same
+  // display name/role as the generic job it's a re-skin of (Aldric's own class is still
+  // named "Lanceiro", same as the plain Lancer enemy) — so any picker that just prints
+  // CLASSES[c].name is unfindable/ambiguous for that classId specifically. This map lets
+  // such a picker suffix the hero's own name onto their own classId's label only, leaving
+  // every generic classId's label untouched.
+  const heroNameByClassId: Partial<Record<ClassId, string>> = Object.fromEntries(EDITOR_HEROES.map((h) => [h.classId, h.name]));
   // One entry per distinct sprite (several classes share art — a promoted class, an
   // alternate skin), labeled by whichever class name reaches it first. Named heroes go
-  // first so each of them claims their own sprite's slot under their own name even while
-  // they still share on-disk art with a generic class (e.g. neera/nira with archer) — the
+  // first so each of them claims their own sprite's slot under their own name — the
   // dialog editor needs to be able to name Kael/Neera/Voss/Salazar/Aldric/Malrec as
   // speakers regardless of whether their final art has landed yet.
   const portraitOptions = (() => {
@@ -4168,7 +4190,7 @@ function MapEditorScreen({
             <input
               className="bg-bg border border-border rounded-md px-2 py-1.5"
               value={draft.id}
-              onChange={(e) => setDraft((d) => ({ ...d, id: normalizeScenarioId(e.target.value) }))}
+              onChange={(e) => setDraft((d) => ({ ...d, id: stripScenarioId(e.target.value) }))}
             />
           </label>
           <label className="flex flex-col gap-1">
@@ -4635,6 +4657,7 @@ function MapEditorScreen({
                 {(summonSide === "neutral" ? classOptions : summonOptions).map((c) => (
                   <option key={c} value={c}>
                     {CLASSES[c].name} · {CLASSES[c].role}
+                    {heroNameByClassId[c] ? ` — ${heroNameByClassId[c]}` : ""}
                   </option>
                 ))}
               </select>
@@ -4946,6 +4969,7 @@ function MapEditorScreen({
                   {classOptions.map((c) => (
                     <option key={c} value={c}>
                       {CLASSES[c].name} · {CLASSES[c].role}
+                      {heroNameByClassId[c] ? ` — ${heroNameByClassId[c]}` : ""}
                     </option>
                   ))}
                 </select>
@@ -4966,7 +4990,10 @@ function MapEditorScreen({
                   <button
                     type="button"
                     onClick={() => {
-                      const pool = classOptions.filter((c) => !isSummonClass(c));
+                      // Never hand a random enemy a named hero's own classId (Aldric,
+                      // kaelFinal, Malrec's conjurer, ...) — that classId's unit ID belongs
+                      // exclusively to that hero, not to a shuffled mook.
+                      const pool = classOptions.filter((c) => !isSummonClass(c) && !heroNameByClassId[c]);
                       const pick = pool[Math.floor(Math.random() * pool.length)] ?? s.classId;
                       updateSpawn(side, i, { classId: pick });
                     }}
@@ -5860,6 +5887,9 @@ function BattleScreen({
       case "summonFamiliar":
         engine.startSummonFamiliar();
         break;
+      case "summonFamiliar2":
+        engine.startSummonFamiliar2();
+        break;
       case "webOfDreams":
         engine.startWebOfDreams();
         break;
@@ -6350,15 +6380,15 @@ function BattleScreen({
               ))}
             </div>
             <p className="text-xs uppercase tracking-[0.18em] text-muted mb-2">Velocidade</p>
-            <div className="grid grid-cols-2 gap-1 mb-4">
-              {(["normal", "fast"] as const).map((mode) => (
+            <div className="grid grid-cols-3 gap-1 mb-4">
+              {(["slow", "normal", "fast"] as const).map((mode) => (
                 <Button
                   key={mode}
                   size="sm"
                   variant={hud.speedMode === mode ? undefined : "quiet"}
                   onClick={() => engine.setSpeed(mode)}
                 >
-                  {mode === "normal" ? "Normal" : "Rápida"}
+                  {mode === "slow" ? "Lenta" : mode === "normal" ? "Normal" : "Rápida"}
                 </Button>
               ))}
             </div>
@@ -6982,6 +7012,12 @@ function StatusPanel({ unit, statPointAllocation, unspentStatPoints, onAdjustSta
                         <img src={spellIcon("web-of-dreams")} alt="" className="size-5 rounded-sm object-cover shrink-0" />
                         <p className="text-xs truncate">
                           {WEB_OF_DREAMS.name} <span className="tabular-nums text-muted">×{unit.spells[tierKey(spellTier("webOfDreams")!)]}</span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-bg border border-border rounded-md px-2 py-1.5">
+                        <img src={spellIcon("summon-familiar")} alt="" className="size-5 rounded-sm object-cover shrink-0" />
+                        <p className="text-xs truncate">
+                          {SUMMON_FAMILIAR2.name} <span className="tabular-nums text-muted">×{unit.spells[tierKey(spellTier("summonFamiliar2")!)]}</span>
                         </p>
                       </div>
                     </>

@@ -591,6 +591,9 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     size: 1,
     init: 7,
   },
+  // sprite is "archerRecruit", NOT "neera" — that's Neera the MC's own sprite. See the
+  // SpriteId comment in types.ts: this generic enemy (and its own promotions, ranger/
+  // assassin) gets its own alternate slot so it never shares Neera's unit ID.
   archer: {
     id: "archer",
     name: "Arqueira",
@@ -603,10 +606,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 6,
     minRange: 2,
     maxRange: 4,
-    sprite: "nira",
+    sprite: "archerRecruit",
     size: 1,
     init: 3,
   },
+  // sprite is "mageRecruit", NOT "voss" — that's Voss the MC's own sprite. Same split as
+  // archer above; elementalist/warlock (this class's own promotions) follow suit.
   mage: {
     id: "mage",
     name: "Mago Negro",
@@ -619,10 +624,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 2,
-    sprite: "voss",
+    sprite: "mageRecruit",
     size: 1,
     init: 5,
   },
+  // sprite is "healerRecruit", NOT "salazar" — that's Salazar the MC's own sprite. Same
+  // split as archer/mage above; cleric/bishop (this class's own promotions) follow suit.
   healer: {
     id: "healer",
     name: "Curandeiro",
@@ -635,7 +642,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 1,
-    sprite: "salazar",
+    sprite: "healerRecruit",
     size: 1,
     init: 8,
   },
@@ -1095,7 +1102,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 6,
     minRange: 2,
     maxRange: 4,
-    sprite: "nira",
+    sprite: "neera",
     size: 1,
     init: 3,
   },
@@ -1170,6 +1177,26 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     init: 5,
     summon: true,
   },
+  // Same deal as "familiar" above — every combat stat here is a fallback only, computed
+  // live from the summoner at cast time (see castSummonFamiliar). Cast once the conjurer
+  // has promoted (level 15+), it reads as the familiar's own stronger evolution.
+  familiar2: {
+    id: "familiar2",
+    name: "Familiar Maior",
+    role: "Invocação",
+    hp: 16,
+    atk: 5,
+    mag: 5,
+    def: 2,
+    res: 2,
+    mov: 5,
+    minRange: 1,
+    maxRange: 1,
+    sprite: "familiar2",
+    size: 1,
+    init: 6,
+    summon: true,
+  },
   paladin: {
     id: "paladin",
     name: "Paladino",
@@ -1205,6 +1232,8 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   // Classes promovidas (promoção no nível 15) — stats de combate, arte e nome definitivo
   // ainda são provisórios (copiados 1:1 da classe base, sprite reaproveitado). Só a
   // progressão de magia (tierUses / CLASS_TIER_TABLE mais abaixo) já é a de verdade.
+  // sprite is "mageRecruit", NOT "voss" — see CLASSES.mage above; a promoted generic Mage
+  // enemy stays on the same alternate slot, never Voss's own.
   elementalist: {
     id: "elementalist",
     name: "Elementalista",
@@ -1217,7 +1246,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 2,
-    sprite: "voss",
+    sprite: "mageRecruit",
     size: 1,
     init: 5,
   },
@@ -1233,7 +1262,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 2,
-    sprite: "voss",
+    sprite: "mageRecruit",
     size: 1,
     init: 5,
   },
@@ -1269,6 +1298,8 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     size: 1,
     init: 6,
   },
+  // sprite is "healerRecruit", NOT "salazar" — see CLASSES.healer above; a promoted generic
+  // Healer enemy stays on the same alternate slot, never Salazar's own.
   cleric: {
     id: "cleric",
     name: "Clérigo",
@@ -1281,7 +1312,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 1,
-    sprite: "salazar",
+    sprite: "healerRecruit",
     size: 1,
     init: 8,
   },
@@ -1297,10 +1328,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 1,
-    sprite: "salazar",
+    sprite: "healerRecruit",
     size: 1,
     init: 8,
   },
+  // sprite is "archerRecruit", NOT "neera" — see CLASSES.archer above; a promoted generic
+  // Archer enemy stays on the same alternate slot, never Neera's own.
   ranger: {
     id: "ranger",
     name: "Patrulheiro",
@@ -1313,7 +1346,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 6,
     minRange: 2,
     maxRange: 4,
-    sprite: "nira",
+    sprite: "archerRecruit",
     size: 1,
     init: 3,
   },
@@ -1404,6 +1437,7 @@ export const GROWTH: Record<ClassId, { hp: number; atk: number; mag: number; def
   // every time one is cast, not from a level table. Present only because GROWTH is keyed by
   // every ClassId.
   familiar: { hp: 0, atk: 0, mag: 0, def: 0, res: 0 },
+  familiar2: { hp: 0, atk: 0, mag: 0, def: 0, res: 0 },
   paladin: { hp: 5, atk: 1, mag: 1, def: 3, res: 2 },
   heavyKnight: { hp: 5, atk: 1, mag: 0, def: 3, res: 1 },
   // Provisório — copiado da classe base (ver nota em CLASSES acima).
@@ -2923,6 +2957,16 @@ export const SUMMON_FAMILIAR = {
   statScale: 0.5,
 };
 
+/** Conjurer tier 2: a second, stronger summon — its own spell/slot/tier-2 charge, not an
+ * upgrade of Invocar Familiar. The first case of a class having more than one spell choice
+ * at the same tier, sharing that tier's pool of uses (see castSummonFamiliar's `evolved`
+ * parameter and SPELL_TIER.summonFamiliar2). */
+export const SUMMON_FAMILIAR2 = {
+  name: "Invocar Familiar Maior",
+  range: 7,
+  statScale: 0.75,
+};
+
 /** Conjurer tier 2: drops a sticky patch of webbing centered on the target cell. Every unit
  * (either side) standing in it at cast time rolls sleepChance to fall asleep for 1D4 of its
  * own turns (early wake + sleepBonusDamage on the hit that wakes it). While the zone lasts,
@@ -3304,6 +3348,7 @@ export const SPELL_TIER: Partial<Record<SpellKind, SpellTier>> = {
   sweep: 2,
   trip: 3,
   summonFamiliar: 1,
+  summonFamiliar2: 2,
   webOfDreams: 2,
   fireball: 3,
   lightningTier3: 5,

@@ -230,6 +230,15 @@ export function BattleCanvas({
           fx.removeEffect(webShotId);
           webShotId = null;
         }
+        // Spell-cast elemental FX: one-shot WebGL shader bursts a landed fire/acid/lightning/
+        // holy hit queues on the engine (see BattleEngine.queueElementalFx/elementalFxRequests)
+        // since `fx` only exists in this closure. Each carries its own duration and self-expires
+        // in EffectsRenderer, so draining the queue here is all this loop needs to do.
+        if (engine.elementalFxRequests.length) {
+          for (const req of engine.elementalFxRequests.splice(0)) {
+            fx.spawnEffect(req.kind, req.x, req.y, { duration: req.duration });
+          }
+        }
         // Skip the rest of the FX pipeline (scene upload, light/effects/bloom FBO passes)
         // whenever nothing — editor-placed or live spell FX — is actually active, so an
         // ordinary fight never pays for it.
