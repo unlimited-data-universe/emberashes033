@@ -10,33 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as Test3dRouteImport } from './routes/test3d'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Test3dRoute = Test3dRouteImport.update({
+  id: '/test3d',
+  path: '/test3d',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/test3d': typeof Test3dRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/test3d': typeof Test3dRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/test3d': typeof Test3dRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/test3d'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/test3d'
+  id: '__root__' | '/' | '/test3d'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  Test3dRoute: typeof Test3dRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +58,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/test3d': {
+      id: '/test3d'
+      path: '/test3d'
+      fullPath: '/test3d'
+      preLoaderRoute: typeof Test3dRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  Test3dRoute: Test3dRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
