@@ -34,6 +34,9 @@ export interface Scene3DHandle {
   setBillboardTexture: (tex: THREE.Texture) => void;
   showHexOutline: (col: number, row: number, color?: number) => THREE.Line;
   clearHexOutlines: () => void;
+  /** Dev A/B toggle (Phase 1): soft PCF shadow filtering vs. the unfiltered hard-edge
+   * baseline. Leaves light position, shadow-camera bounds, bias and map size untouched. */
+  setPcfSoftShadows: (enabled: boolean) => void;
   resize: (w: number, h: number) => void;
   dispose: () => void;
 }
@@ -214,6 +217,24 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
   }
   faceCameraYAxis();
 
+  // Phase 1 — PCF soft shadow filtering, toggleable for A/B comparison against the
+  // unfiltered baseline from the same camera position. Swapping renderer.shadowMap.type
+  // alone doesn't change already-compiled shadow-sampling shaders, so force every
+  // material to recompile; nothing about the light, shadow camera or map size moves.
+  let pcfSoft = true;
+  function setPcfSoftShadows(enabled: boolean) {
+    if (pcfSoft === enabled) return;
+    pcfSoft = enabled;
+    renderer.shadowMap.type = enabled ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+    renderer.shadowMap.needsUpdate = true;
+    scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of materials) mat.needsUpdate = true;
+    });
+  }
+
   function resize(w: number, h: number) {
     camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
@@ -247,6 +268,7 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     setBillboardTexture,
     showHexOutline,
     clearHexOutlines,
+    setPcfSoftShadows,
     resize,
     dispose: () => {
       cancelAnimationFrame(raf);
