@@ -23,13 +23,12 @@ export function useScene3DDemo() {
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
+    // A real hero's own idle frame (Kael) — the old /spritesheet.png this pulled from
+    // turned out to be an unrelated monster placeholder sheet, not a character.
     const loader = new THREE.TextureLoader();
-    loader.load("/spritesheet.png", (tex) => {
+    loader.load("/game/sprites/kael/1.png", (tex) => {
       tex.wrapS = THREE.ClampToEdgeWrapping;
       tex.wrapT = THREE.ClampToEdgeWrapping;
-      // Show just the first idle frame: crop via UV offset/repeat (12 cols x 5 rows grid).
-      tex.repeat.set(1 / 12, 1 / 5);
-      tex.offset.set(0, 4 / 5);
       handle.setBillboardTexture(tex);
     });
 

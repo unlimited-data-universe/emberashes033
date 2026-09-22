@@ -207,33 +207,44 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     hexOutlineGroup.clear();
   }
 
-  // Phase 2 — Contact shadow: a small, soft radial-gradient decal right at the caster's
-  // feet, independent of the sun's shadow map — it exists purely to make the caster feel
-  // planted where it meets the ground. A render-target mask/blur pipeline was tried first
-  // and read as a noisy, irregular smudge instead of a clean soft shadow; this is the same
-  // plain canvas-drawn radial-gradient sprite technique already proven elsewhere in this
-  // codebase family for an equivalent "feet" effect — dark center fading smoothly to fully
-  // transparent, no render targets, no blur passes, nothing that can misrender.
-  const contactCanvas = document.createElement("canvas");
-  contactCanvas.width = contactCanvas.height = 128;
-  const contactCtx = contactCanvas.getContext("2d")!;
-  const contactGradient = contactCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  contactGradient.addColorStop(0, "rgba(12,12,16,0.4)");
-  contactGradient.addColorStop(0.5, "rgba(12,12,16,0.18)");
-  contactGradient.addColorStop(1, "rgba(12,12,16,0)");
-  contactCtx.fillStyle = contactGradient;
-  contactCtx.fillRect(0, 0, 128, 128);
-  const contactTexture = new THREE.CanvasTexture(contactCanvas);
-
+  // Phase 2 — Contact shadow: a small, soft radial falloff right at the caster's feet,
+  // independent of the sun's shadow map — it exists purely to make the caster feel planted
+  // where it meets the ground. Two earlier attempts failed: a render-target mask/blur
+  // pipeline read as a noisy smudge, and a canvas-drawn gradient texture silently never
+  // rendered (confirmed via isolated tests — the CPU-side canvas had correct pixel data, but
+  // nothing sampled it on screen even with alphaTest forcing an opaque draw; never fully
+  // root-caused). A tiny custom shader sidesteps textures entirely: the falloff is computed
+  // directly per-pixel from UV distance to center, so there's no texture upload step that
+  // can silently fail.
   const contactDecalGeo = new THREE.PlaneGeometry(1, 1);
   contactDecalGeo.rotateX(-Math.PI / 2);
-  const contactDecalMat = new THREE.MeshBasicMaterial({
-    map: contactTexture,
+  const contactDecalMat = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
+    uniforms: {
+      color: { value: new THREE.Color(0x0c0c10) },
+      peakOpacity: { value: 0.7 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 color;
+      uniform float peakOpacity;
+      varying vec2 vUv;
+      void main() {
+        float d = distance(vUv, vec2(0.5));
+        float falloff = smoothstep(0.5, 0.0, d); // 0 at the rim, 1 at dead center
+        gl_FragColor = vec4(color, falloff * falloff * peakOpacity);
+      }
+    `,
   });
   const contactDecal = new THREE.Mesh(contactDecalGeo, contactDecalMat);
-  contactDecal.scale.set(0.85, 1, 0.5); // wider than deep — a stance footprint, not a circle
+  contactDecal.scale.set(1.05, 1, 0.65); // wider than deep — a stance footprint, not a circle
   contactDecal.position.y = 0.012; // just above the terrain, below the hex outline overlay
   scene.add(contactDecal);
 
@@ -262,7 +273,12 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     side: THREE.DoubleSide,
   });
   const billboard = new THREE.Mesh(billboardGeo, billboardMat);
-  billboard.position.set(hexW * 2, 0.75, hexH * 2);
+  // hexH * 2 (row 2) happens to land on a raised hex (~0.55 units up per this seed's RNG) —
+  // this billboard's own Y is a fixed "flat ground" assumption unrelated to terrain height
+  // (a separate, pre-existing limitation, not part of this shadow work), so on a raised hex
+  // the terrain visibly slices through the sprite. hexH * 4 (row 4) is flat for this seed —
+  // picked so the demo character actually stands on the ground it appears to stand on.
+  billboard.position.set(hexW * 2, 0.75, hexH * 4);
   billboard.castShadow = true;
   billboard.receiveShadow = true;
   scene.add(billboard);
@@ -315,7 +331,6 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     groundMat.dispose();
     billboardGeo.dispose();
     billboardMat.dispose();
-    contactTexture.dispose();
     contactDecalGeo.dispose();
     contactDecalMat.dispose();
     renderer.dispose();
