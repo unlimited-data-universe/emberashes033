@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { HorizontalBlurShader } from "three/addons/shaders/HorizontalBlurShader.js";
+import { VerticalBlurShader } from "three/addons/shaders/VerticalBlurShader.js";
 
 /** HD-2D proof-of-concept: real 3D hex terrain + shadow-mapped directional light +
  * a camera-facing billboard sprite that receives that same light and casts/receives shadow.
@@ -37,6 +39,9 @@ export interface Scene3DHandle {
   /** Dev A/B toggle (Phase 1): soft PCF shadow filtering vs. the unfiltered hard-edge
    * baseline. Leaves light position, shadow-camera bounds, bias and map size untouched. */
   setPcfSoftShadows: (enabled: boolean) => void;
+  /** Dev toggle (Phase 2): short-range contact shadow under the billboard. Independent of
+   * the directional-light shadow, which stays on regardless of this flag. */
+  setContactShadows: (enabled: boolean) => void;
   resize: (w: number, h: number) => void;
   dispose: () => void;
 }
@@ -44,7 +49,7 @@ export interface Scene3DHandle {
 export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: number): Scene3DHandle {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoftShadowMap is deprecated as of r186 (merged into this)
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
@@ -111,6 +116,24 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
       const color = palette[Math.floor(rng() * palette.length)]!.clone();
       centers.push({ x: wx, z: wz, height, color });
     }
+  }
+
+  // Same inverse-distance height blend as the vertex loop below, exposed standalone so
+  // anything placed on the ground (contact-shadow decals, later props) can sit at the
+  // real local surface height instead of assuming flat y=0 — the terrain is not flat.
+  function terrainHeightAt(x: number, z: number): number {
+    let wsum = 0;
+    let hsum = 0;
+    for (const c of centers) {
+      const dx = x - c.x;
+      const dz = z - c.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > hexW * hexW * 4) continue;
+      const w = 1 / (d2 + 0.05);
+      wsum += w;
+      hsum += w * c.height;
+    }
+    return wsum > 0 ? hsum / wsum : 0;
   }
 
   const boardWspan = (cols + 1) * hexW;
@@ -186,6 +209,118 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     hexOutlineGroup.clear();
   }
 
+  // Phase 2 — Contact shadows: a small, independent top-down render of just the casters
+  // (layer CONTACT_LAYER), blurred and projected onto the ground as a short-range decal.
+  // This has nothing to do with the sun's shadow map — it exists purely to make a caster
+  // feel planted where it meets the ground, and fades out well inside its own footprint so
+  // no edge of the decal plane is ever visible.
+  const CONTACT_LAYER = 1;
+  const CONTACT_FRUSTUM = 3.2; // world units per side — short range, not the whole board
+  const CONTACT_RT_SIZE = 256;
+  // Blur step size, in render-target texels. The 9-tap kernel reaches ±4 taps, so the
+  // effective blur radius is ~4x this value — kept small relative to the footprint's own
+  // ~50-texel width, or the blur smears its peak alpha down to nearly nothing.
+  const CONTACT_BLUR_TEXELS = 3;
+
+  const contactCam = new THREE.OrthographicCamera(
+    -CONTACT_FRUSTUM / 2,
+    CONTACT_FRUSTUM / 2,
+    CONTACT_FRUSTUM / 2,
+    -CONTACT_FRUSTUM / 2,
+    0.1,
+    10,
+  );
+  contactCam.layers.set(CONTACT_LAYER);
+  contactCam.up.set(0, 0, -1); // looking straight down needs a non-parallel up hint
+
+  const contactRTMask = new THREE.WebGLRenderTarget(CONTACT_RT_SIZE, CONTACT_RT_SIZE);
+  const contactRTBlurA = new THREE.WebGLRenderTarget(CONTACT_RT_SIZE, CONTACT_RT_SIZE);
+  const contactRTBlurB = new THREE.WebGLRenderTarget(CONTACT_RT_SIZE, CONTACT_RT_SIZE);
+
+  const blurCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const blurScene = new THREE.Scene();
+  const hBlurMat = new THREE.ShaderMaterial(HorizontalBlurShader);
+  const vBlurMat = new THREE.ShaderMaterial(VerticalBlurShader);
+  const blurQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), hBlurMat);
+  blurScene.add(blurQuad);
+
+  // The billboard is a flat, camera-facing vertical card — seen from straight down it's
+  // edge-on and has no visible area, so it can't supply its own top-down silhouette the way
+  // a real 3D prop (rock, crate, wall) would. Stand in with a small flat footprint proxy at
+  // its base instead: an ellipse (wider than deep, like an actual stance) rather than a
+  // circle, invisible in the main view (CONTACT_LAYER only) and used purely as the thing
+  // the contact pass bakes and blurs.
+  const contactMaskMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const footprintGeo = new THREE.CircleGeometry(0.32, 24);
+  footprintGeo.scale(1, 0.6, 1);
+  footprintGeo.rotateX(-Math.PI / 2);
+  const footprint = new THREE.Mesh(footprintGeo, contactMaskMat);
+  footprint.layers.disableAll();
+  footprint.layers.enable(CONTACT_LAYER); // never rendered by the main camera
+  footprint.position.y = 0.001;
+  scene.add(footprint);
+
+  const contactDecalGeo = new THREE.PlaneGeometry(CONTACT_FRUSTUM, CONTACT_FRUSTUM);
+  contactDecalGeo.rotateX(-Math.PI / 2);
+  const contactDecalMat = new THREE.MeshBasicMaterial({
+    map: contactRTBlurB.texture,
+    transparent: true,
+    opacity: 0.32, // subtle reinforcement, not a black disc
+    depthWrite: false,
+  });
+  const contactDecal = new THREE.Mesh(contactDecalGeo, contactDecalMat);
+  contactDecal.position.y = 0.012; // just above the terrain, below the hex outline overlay
+  scene.add(contactDecal);
+
+  let contactShadowsEnabled = true;
+  function setContactShadows(enabled: boolean) {
+    contactShadowsEnabled = enabled;
+    contactDecal.visible = enabled;
+  }
+
+  function renderContactShadowPass() {
+    // 1. Follow the caster, then bake the footprint proxy into a small mask, seen from
+    // directly above — only CONTACT_LAYER objects are visible to contactCam, so the terrain
+    // never shadows itself here. The terrain isn't flat, so both the proxy and the decal
+    // below need the real local ground height — a fixed y sat under raised hexes and got
+    // depth-occluded by the terrain, making the whole effect invisible.
+    const groundY = terrainHeightAt(billboard.position.x, billboard.position.z);
+    footprint.position.set(billboard.position.x, groundY + 0.004, billboard.position.z);
+    contactCam.position.set(billboard.position.x, groundY + 3, billboard.position.z);
+    contactCam.lookAt(billboard.position.x, groundY, billboard.position.z);
+    // scene.background is an opaque fill that three.js draws for the whole viewport ahead of
+    // any object traversal — layer filtering never sees it, so it was blanking the mask to
+    // 100% opaque every frame regardless of what the footprint actually covered. Null it out
+    // for just this pass so the transparent clear underneath it actually holds.
+    const prevBackground = scene.background;
+    scene.background = null;
+    renderer.setRenderTarget(contactRTMask);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear(true, true, true);
+    renderer.render(scene, contactCam);
+    scene.background = prevBackground;
+
+    // 2. Separable blur (horizontal then vertical) so the mask fades out softly instead of
+    // ending in a hard-edged cutout.
+    hBlurMat.uniforms.tDiffuse.value = contactRTMask.texture;
+    hBlurMat.uniforms.h.value = CONTACT_BLUR_TEXELS / CONTACT_RT_SIZE;
+    blurQuad.material = hBlurMat;
+    renderer.setRenderTarget(contactRTBlurA);
+    renderer.render(blurScene, blurCam);
+
+    vBlurMat.uniforms.tDiffuse.value = contactRTBlurA.texture;
+    vBlurMat.uniforms.v.value = CONTACT_BLUR_TEXELS / CONTACT_RT_SIZE;
+    blurQuad.material = vBlurMat;
+    renderer.setRenderTarget(contactRTBlurB);
+    renderer.render(blurScene, blurCam);
+
+    renderer.setRenderTarget(null);
+
+    // 3. Follow the caster so the decal always sits right under it, just above the real
+    // local ground height so it's never depth-occluded by the terrain it's projected onto.
+    contactDecal.position.set(billboard.position.x, groundY + 0.016, billboard.position.z);
+  }
+
   // Billboard: a camera-facing plane holding the character sprite. MeshStandardMaterial (not
   // MeshBasicMaterial) so it actually receives the sun's lighting and shadow like Triangle
   // Strategy's lit sprite characters, instead of looking like a flat unlit sticker.
@@ -200,12 +335,15 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
   billboard.position.set(hexW * 2, 0.75, hexH * 2);
   billboard.castShadow = true;
   billboard.receiveShadow = true;
+  billboard.layers.enable(CONTACT_LAYER); // also visible to contactCam, alongside its default layer
   scene.add(billboard);
 
   function setBillboardTexture(tex: THREE.Texture) {
     tex.colorSpace = THREE.SRGBColorSpace;
     billboardMat.map = tex;
     billboardMat.needsUpdate = true;
+    contactMaskMat.map = tex;
+    contactMaskMat.needsUpdate = true;
   }
 
   function faceCameraYAxis() {
@@ -225,7 +363,7 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
   function setPcfSoftShadows(enabled: boolean) {
     if (pcfSoft === enabled) return;
     pcfSoft = enabled;
-    renderer.shadowMap.type = enabled ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+    renderer.shadowMap.type = enabled ? THREE.PCFShadowMap : THREE.BasicShadowMap;
     renderer.shadowMap.needsUpdate = true;
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
@@ -250,12 +388,22 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     groundMat.dispose();
     billboardGeo.dispose();
     billboardMat.dispose();
+    contactRTMask.dispose();
+    contactRTBlurA.dispose();
+    contactRTBlurB.dispose();
+    blurQuad.geometry.dispose();
+    hBlurMat.dispose();
+    vBlurMat.dispose();
+    contactMaskMat.dispose();
+    contactDecalGeo.dispose();
+    contactDecalMat.dispose();
     renderer.dispose();
   }
 
   let raf = 0;
   function loop() {
     faceCameraYAxis();
+    if (contactShadowsEnabled) renderContactShadowPass();
     renderer.render(scene, camera);
     raf = requestAnimationFrame(loop);
   }
@@ -269,6 +417,7 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     showHexOutline,
     clearHexOutlines,
     setPcfSoftShadows,
+    setContactShadows,
     resize,
     dispose: () => {
       cancelAnimationFrame(raf);

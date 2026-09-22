@@ -20,6 +20,7 @@ import { buyInnMeal, fullness, useRation } from "./hunger";
 import { hungerPenaltyFor, partyIsFed, stepOverworld, teleportOverworld, type OverworldEvent } from "./overworld";
 import { GoldAmount } from "./GoldAmount";
 import { DISPLAY_VERSION } from "./version";
+import { useScene3DDemo } from "./gfx3d/useScene3DDemo";
 import {
   ALL_LOCATIONS,
   ALL_MISSIONS,
@@ -1371,7 +1372,12 @@ export function GameApp() {
           onBack={goToTitle}
           onDebug={goToMap}
           onMapEditor={() => setScreen("mapEditor")}
+          onDevControls={() => setScreen("devControls")}
         />
+      )}
+
+      {screen === "devControls" && (
+        <DevControlsScreen onBack={() => setScreen("testMenu")} />
       )}
 
       {screen === "mapChoice" && (
@@ -2578,10 +2584,12 @@ function TestMenuScreen({
   onBack,
   onDebug,
   onMapEditor,
+  onDevControls,
 }: {
   onBack: () => void;
   onDebug: () => void;
   onMapEditor: () => void;
+  onDevControls: () => void;
 }) {
   return (
     <section className="h-dvh min-h-0 flex flex-col bg-bg">
@@ -2611,8 +2619,75 @@ function TestMenuScreen({
           <p className="font-display text-2xl leading-tight">Map Editor</p>
           <p className="text-sm text-muted mt-1">Pinta terreno, posiciona spawns, testa na hora e exporta pra colar no jogo.</p>
         </button>
+        <button
+          type="button"
+          onClick={onDevControls}
+          className="text-left rounded-xl border border-border bg-bg/40 px-5 py-4 hover:border-accent"
+        >
+          <p className="font-display text-2xl leading-tight">Dev Controls</p>
+          <p className="text-sm text-muted mt-1">Protótipo 3D: liga/desliga PCF e contact shadows pra comparar.</p>
+        </button>
       </div>
     </section>
+  );
+}
+
+/** Dev-only screen: the HD-2D 3D proof-of-concept scene with its shadow-quality toggles as
+ * real UI switches instead of keyboard shortcuts, so they're reachable from Test Mode
+ * alongside Debug and Map Editor rather than only from the standalone /test3d route. */
+function DevControlsScreen({ onBack }: { onBack: () => void }) {
+  const { canvasRef, pcfSoft, setPcfSoft, contactShadows, setContactShadows } = useScene3DDemo();
+  return (
+    <section className="h-dvh min-h-0 flex flex-col bg-bg">
+      <header className="flex items-center gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 border-b border-border">
+        <button type="button" onClick={onBack} className="size-10 grid place-items-center rounded-md border border-border" aria-label="Voltar">
+          <ChevronLeft className="size-5" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm uppercase tracking-[0.18em] text-muted">Modo teste</p>
+          <h1 className="font-display text-3xl leading-none">Dev Controls</h1>
+        </div>
+      </header>
+      <div className="flex-1 min-h-0 relative bg-black">
+        <canvas ref={canvasRef} className="absolute inset-0 size-full" />
+        <div className="absolute top-4 right-4 w-72 rounded-xl border border-border bg-bg/85 backdrop-blur p-4 space-y-3">
+          <p className="text-sm uppercase tracking-[0.14em] text-muted">Shadow quality</p>
+          <DevToggleRow label="PCF soft shadows" enabled={pcfSoft} onChange={setPcfSoft} />
+          <DevToggleRow label="Contact shadows" enabled={contactShadows} onChange={setContactShadows} />
+          <p className="text-xs text-muted leading-relaxed pt-1">
+            PCF suaviza a borda da sombra direcional já existente. Contact shadows reforça o
+            contato entre o personagem e o chão numa área curta. Nenhum dos dois altera a
+            sombra direcional em si — dá pra comparar cada um isoladamente.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DevToggleRow({
+  label,
+  enabled,
+  onChange,
+}: {
+  label: string;
+  enabled: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm">{label}</span>
+      <button
+        type="button"
+        onClick={() => onChange(!enabled)}
+        aria-pressed={enabled}
+        className={`h-7 w-12 shrink-0 rounded-full border border-border relative transition-colors ${enabled ? "bg-accent" : "bg-surface-2"}`}
+      >
+        <span
+          className={`absolute top-0.5 size-5 rounded-full bg-bg transition-transform ${enabled ? "translate-x-[22px]" : "translate-x-0.5"}`}
+        />
+      </button>
+    </div>
   );
 }
 

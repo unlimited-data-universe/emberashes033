@@ -129,7 +129,7 @@ export type SpellKind =
   | "intimidatingPresence"
   | "stampede"
   | "shock";
-export type ScreenId = "boot" | "title" | "campaign" | "mapChoice" | "vauIntro" | "worldMap" | "overworldMap" | "briefing" | "cutscene" | "epilogue" | "battle" | "victory" | "defeat" | "inn" | "testMenu" | "mapEditor";
+export type ScreenId = "boot" | "title" | "campaign" | "mapChoice" | "vauIntro" | "worldMap" | "overworldMap" | "briefing" | "cutscene" | "epilogue" | "battle" | "victory" | "defeat" | "inn" | "testMenu" | "mapEditor" | "devControls";
 export type Phase = "player" | "enemy";
 export type InputMode = "idle" | "selected" | "awaitAction" | "awaitAttack" | "awaitOffHand" | "awaitSpell" | "awaitPotion" | "locked";
 
