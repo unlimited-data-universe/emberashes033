@@ -1,4 +1,8 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 /** HD-2D proof-of-concept: real 3D hex terrain + shadow-mapped directional light +
  * a camera-facing billboard sprite that receives that same light and casts/receives shadow.
@@ -40,6 +44,11 @@ export interface Scene3DHandle {
   /** Dev toggle (Phase 2): short-range contact shadow under the billboard. Independent of
    * the directional-light shadow, which stays on regardless of this flag. */
   setContactShadows: (enabled: boolean) => void;
+  /** Dev toggle (Phase 3): ground-truth ambient occlusion post-process. OFF renders through
+   * the plain renderer (byte-for-byte the Phase 1+2 look); ON runs the same scene through an
+   * EffectComposer with GTAOPass added on top — sunlight, the directional shadow, PCF and
+   * contact shadows are all unchanged either way, this only adds local occlusion depth. */
+  setGTAO: (enabled: boolean) => void;
   resize: (w: number, h: number) => void;
   dispose: () => void;
 }
@@ -316,10 +325,39 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     });
   }
 
+  // Phase 3 — GTAO (ground-truth ambient occlusion), a post-process pass entirely separate
+  // from the sun's shadow and Phase 2's contact decal: it darkens small-scale geometry
+  // intersections (feet against terrain, corners, overlaps) using screen-space depth/normal
+  // data, not another light or shadow map. OFF renders through the plain renderer, byte-for-
+  // byte the Phase 1+2 look; ON runs the exact same scene through this composer instead —
+  // nothing about the sun, PCF or the contact decal changes either way.
+  //
+  // KNOWN ISSUE, unresolved: with GTAO ON, a hard-edged rectangular patch appears on the
+  // ground (a real, reproducible screen-space artifact — not a one-off). Reducing the AO
+  // radius (tried 0.3 -> 0.15) made no visible difference, ruling out "sampling radius
+  // reaching the terrain's finite edge" as the cause. Not root-caused. Defaults to OFF for
+  // exactly this reason — flip it on only to keep debugging it, not for real use yet.
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const gtaoPass = new GTAOPass(scene, camera, 1, 1);
+  gtaoPass.output = GTAOPass.OUTPUT.Default;
+  // Local radius (world units, on the scale of this board's ~1.5-1.7 unit hexes) and a
+  // moderate blend so it reads as depth at intersections, not a global darkening wash.
+  gtaoPass.updateGtaoMaterial({ radius: 0.15 });
+  gtaoPass.blendIntensity = 0.7;
+  composer.addPass(gtaoPass);
+  composer.addPass(new OutputPass());
+
+  let gtaoEnabled = false; // keep false — see the KNOWN ISSUE note above
+  function setGTAO(enabled: boolean) {
+    gtaoEnabled = enabled;
+  }
+
   function resize(w: number, h: number) {
     camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
+    composer.setSize(w, h);
   }
 
   function dispose() {
@@ -333,6 +371,8 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     billboardMat.dispose();
     contactDecalGeo.dispose();
     contactDecalMat.dispose();
+    gtaoPass.dispose();
+    composer.dispose();
     renderer.dispose();
   }
 
@@ -340,7 +380,8 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
   function loop() {
     faceCameraYAxis();
     if (contactShadowsEnabled) updateContactShadow();
-    renderer.render(scene, camera);
+    if (gtaoEnabled) composer.render();
+    else renderer.render(scene, camera);
     raf = requestAnimationFrame(loop);
   }
   raf = requestAnimationFrame(loop);
@@ -354,6 +395,7 @@ export function createScene3D(canvas: HTMLCanvasElement, cols: number, rows: num
     clearHexOutlines,
     setPcfSoftShadows,
     setContactShadows,
+    setGTAO,
     resize,
     dispose: () => {
       cancelAnimationFrame(raf);

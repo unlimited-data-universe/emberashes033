@@ -10,6 +10,7 @@ export function useScene3DDemo() {
   const handleRef = useRef<Scene3DHandle | null>(null);
   const [pcfSoft, setPcfSoftState] = useState(true);
   const [contactShadows, setContactShadowsState] = useState(true);
+  const [gtao, setGTAOState] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -62,7 +63,12 @@ export function useScene3DDemo() {
     handleRef.current?.setContactShadows(enabled);
   }
 
-  return { canvasRef, pcfSoft, setPcfSoft, contactShadows, setContactShadows };
+  function setGTAO(enabled: boolean) {
+    setGTAOState(enabled);
+    handleRef.current?.setGTAO(enabled);
+  }
+
+  return { canvasRef, pcfSoft, setPcfSoft, contactShadows, setContactShadows, gtao, setGTAO };
 }
 
 declare global {

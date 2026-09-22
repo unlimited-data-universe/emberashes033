@@ -2636,7 +2636,7 @@ function TestMenuScreen({
  * real UI switches instead of keyboard shortcuts, so they're reachable from Test Mode
  * alongside Debug and Map Editor rather than only from the standalone /test3d route. */
 function DevControlsScreen({ onBack }: { onBack: () => void }) {
-  const { canvasRef, pcfSoft, setPcfSoft, contactShadows, setContactShadows } = useScene3DDemo();
+  const { canvasRef, pcfSoft, setPcfSoft, contactShadows, setContactShadows, gtao, setGTAO } = useScene3DDemo();
   return (
     <section className="h-dvh min-h-0 flex flex-col bg-bg">
       <header className="flex items-center gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 border-b border-border">
@@ -2654,9 +2654,11 @@ function DevControlsScreen({ onBack }: { onBack: () => void }) {
           <p className="text-sm uppercase tracking-[0.14em] text-muted">Shadow quality</p>
           <DevToggleRow label="PCF soft shadows" enabled={pcfSoft} onChange={setPcfSoft} />
           <DevToggleRow label="Contact shadows" enabled={contactShadows} onChange={setContactShadows} />
+          <DevToggleRow label="GTAO" enabled={gtao} onChange={setGTAO} />
           <p className="text-xs text-muted leading-relaxed pt-1">
             PCF suaviza a borda da sombra direcional já existente. Contact shadows reforça o
-            contato entre o personagem e o chão numa área curta. Nenhum dos dois altera a
+            contato entre o personagem e o chão numa área curta. GTAO adiciona profundidade
+            local em interseções de geometria (post-processing). Nenhum dos três altera a
             sombra direcional em si — dá pra comparar cada um isoladamente.
           </p>
         </div>
