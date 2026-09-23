@@ -140,7 +140,7 @@ export function canCounter(
   cols: number,
 ): boolean {
   if (!defender.alive) return false;
-  return canHitFrom(defender, { x: defender.x, y: defender.y }, { ...attacker, x: from.x, y: from.y }, tiles, cols);
+  return canHitFrom(defender, { x: defender.x, y: defender.y }, { ...attacker, x: from.x, y: from.y }, tiles, cols, undefined, true);
 }
 
 export function makeForecast(

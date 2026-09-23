@@ -119,12 +119,29 @@ export function mapSavePlugin() {
     configResolved(config) {
       watchedMapsDir = join(config.root, MAPS_DIR).replaceAll("\\", "/");
     },
-    // Map JSONs are written by this plugin. They are listed by the editor directly after
-    // the confirmed response, so reloading the whole game here only throws the author out
-    // of the editor without making the save safer.
+    // Map JSONs are written by this plugin (or by hand, or by another tool entirely — any
+    // of the three). The editor already refreshes its own picker lists straight from the
+    // confirmed save response, so a full browser reload here would only throw the author
+    // out of the editor without making the save safer — that's still suppressed below.
+    // But mapstore.ts's `import.meta.glob("./maps/*.json", { eager: true })` gets baked
+    // into ITS OWN transformed module at the moment Vite first transforms it, and without
+    // an explicit invalidation here Vite has no way to know that module's result is stale —
+    // it never re-transforms mapstore.ts again, EVEN ON A FULL PAGE RELOAD, until the dev
+    // server itself restarts. That's what let a just-saved/just-deleted/hand-written map
+    // file silently vanish from every list that resolves through ALL_MISSIONS/missionById
+    // (the campaign screen, "Carregar mapa da campanha", etc.) — not stale until refreshed,
+    // stale until the whole server restarts. Invalidating the module here (without forcing
+    // the reload) means the very next real page load picks up the current file list, no
+    // restart required.
     handleHotUpdate(ctx) {
       const changed = ctx.file.replaceAll("\\", "/");
-      if (watchedMapsDir && changed.startsWith(`${watchedMapsDir}/`) && changed.endsWith(".json")) return [];
+      if (watchedMapsDir && changed.startsWith(`${watchedMapsDir}/`) && changed.endsWith(".json")) {
+        const mapstoreFile = join(ctx.server.config.root, "src", "game", "mapstore.ts");
+        for (const mod of ctx.server.moduleGraph.getModulesByFile(mapstoreFile) ?? []) {
+          ctx.server.moduleGraph.invalidateModule(mod);
+        }
+        return [];
+      }
     },
     configureServer(server) {
       const dir = join(server.config.root, MAPS_DIR);
@@ -142,7 +159,15 @@ export function mapSavePlugin() {
         const isDelete = pathOnly === MAP_DELETE_ROUTE;
         const isList = pathOnly === MAP_LIST_ROUTE;
         const method = (req.method ?? "GET").toUpperCase();
-        if ((!isMap && !isSlots && !isOrder && !isLocationOrder && !isRandomEncounters && !isDelete && !isList) || (isList ? method !== "GET" : method !== "POST")) {
+        // A GET on one of the three config routes reads the file back as-is (matched below,
+        // before the isList branch) — see the isConfigRead block's own comment for why this
+        // exists: the Locais screen needs a way to refresh its state from disk before it can
+        // safely save, or a stale browser tab silently deletes whatever it doesn't know about.
+        const isConfigRead = (isOrder || isSlots || isLocationOrder) && method === "GET";
+        if (
+          (!isMap && !isSlots && !isOrder && !isLocationOrder && !isRandomEncounters && !isDelete && !isList) ||
+          (isList || isConfigRead ? method !== "GET" : method !== "POST")
+        ) {
           next();
           return;
         }
@@ -154,6 +179,20 @@ export function mapSavePlugin() {
           res.setHeader("content-length", String(body.byteLength));
           res.end(body);
         };
+        // Read one config file back exactly as saved — the Locais screen calls this right
+        // before it lets the author start editing, so its baseline can never be older than
+        // "when I opened this screen" instead of "whenever this browser tab first mounted",
+        // which is what let a stale save silently wipe out another location's real data (a
+        // save posts EVERY location's current array, including ones this tab never learned
+        // about; the isOrder/isSlots handlers below drop anything genuinely empty, so a
+        // location the client never heard of — sent as [] purely from being stale, not from
+        // the author actually clearing it — was indistinguishable from a real deletion).
+        if (isConfigRead) {
+          const path = isOrder ? orderPath : isSlots ? slotsPath : locationOrderPath;
+          const fallback = isLocationOrder ? [] : {};
+          reply(200, { ok: true, value: readBack(path) ?? fallback });
+          return;
+        }
         if (isList) {
           const id = new URL(req.url ?? "", "http://localhost").searchParams.get("id") ?? "";
           if (id && !isSafeMapId(id)) {

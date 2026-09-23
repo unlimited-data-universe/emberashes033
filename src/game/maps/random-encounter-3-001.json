@@ -78,7 +78,7 @@
       "woods",
       "plains",
       "plains",
-      "chest",
+      "plains",
       "plains",
       "plains",
       "woods",
@@ -384,8 +384,8 @@
         "level": 8
       },
       {
-        "name": "Cão de guerra",
-        "classId": "wardog",
+        "name": "Mordavian Puppy",
+        "classId": "morvenianWolf",
         "x": 8,
         "y": 2,
         "level": 8

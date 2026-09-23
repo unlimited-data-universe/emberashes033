@@ -52,6 +52,26 @@ export interface MapDraft {
   /** True to play this map under fog of war — see Mission.fog. Absent on every map
    * saved before fog existed, which reads as off. */
   fog?: boolean;
+  /** See Mission.environment/sunIntensity/ambientIntensity — real-3D-renderer lighting
+   * controls, author-tunable per map so the editor is the one place these live, not a
+   * source-code table only a developer can touch. */
+  environment?: "outdoor" | "indoor";
+  sunIntensity?: number;
+  ambientIntensity?: number;
+  /** See Mission.mistIntensity. */
+  mistIntensity?: number;
+  /** See Mission.mistType. */
+  mistType?: "mist2" | "mist3" | "mist4" | "vignette" | "vignette2" | "vignette3" | "vignette4";
+  /** See Mission.bloomIntensity. */
+  bloomIntensity?: number;
+  /** See Mission.mistSpeed. */
+  mistSpeed?: number;
+  /** See Mission.wispIntensity. */
+  wispIntensity?: number;
+  /** See Mission.wispSpeed. */
+  wispSpeed?: number;
+  /** See Mission.wispColor. */
+  wispColor?: number;
   /** Which world map location this map hangs off, by WorldLocation.id — "" for a map
    * that shouldn't appear on the map at all. A map already reachable through its
    * scenario's own location keeps showing up there whatever this says; this is what
@@ -180,6 +200,16 @@ export function draftToMission(d: MapDraft): Mission {
     hub: d.hub || undefined,
     autoTactics: d.autoTactics ? undefined : false,
     fog: d.fog ? true : undefined,
+    environment: d.environment === "indoor" ? "indoor" : undefined,
+    sunIntensity: typeof d.sunIntensity === "number" ? d.sunIntensity : undefined,
+    ambientIntensity: typeof d.ambientIntensity === "number" ? d.ambientIntensity : undefined,
+    mistIntensity: typeof d.mistIntensity === "number" ? d.mistIntensity : undefined,
+    mistSpeed: typeof d.mistSpeed === "number" ? d.mistSpeed : undefined,
+    mistType: d.mistType === "mist3" || d.mistType === "mist4" || d.mistType === "vignette" || d.mistType === "vignette2" || d.mistType === "vignette3" || d.mistType === "vignette4" ? d.mistType : undefined,
+    bloomIntensity: typeof d.bloomIntensity === "number" ? d.bloomIntensity : undefined,
+    wispIntensity: typeof d.wispIntensity === "number" ? d.wispIntensity : undefined,
+    wispSpeed: typeof d.wispSpeed === "number" ? d.wispSpeed : undefined,
+    wispColor: typeof d.wispColor === "number" ? d.wispColor : undefined,
     introDialog: d.introDialog,
     introDialogEnabled: d.introDialogEnabled,
     outroDialog: d.outroDialog,
@@ -313,6 +343,51 @@ export function saveVersionStore(store: Record<string, MapVersion[]>): boolean {
   }
 }
 
+/** The Locais screen's own config — which missions each location holds, in what order, and
+ * how many it's meant to hold. Saved here as the guaranteed, always-available copy: the dev
+ * server's /__map-order etc. routes write the real repo files too when one is running, but
+ * that write is best-effort (per direct instruction, Locais must save locally regardless of
+ * a dev server or ever touching the repo) and, being shared browser-wide the same way every
+ * localStorage key here is, this is also immune to the same-origin-but-different-tab
+ * staleness that let one tab's stale "Salvar" silently delete another location's real data
+ * (see refreshLocaisState's own comment in GameApp.tsx) — every tab reads and writes this
+ * one shared copy instead of each holding its own React-state snapshot from whenever it
+ * happened to mount. */
+export const LOCAIS_LOCAL_KEY = "ember-locais-local";
+
+export interface LocaisLocal {
+  order: Record<string, string[]>;
+  slots: Record<string, number>;
+  locationOrder: string[];
+}
+
+export function loadLocaisLocal(): LocaisLocal | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(LOCAIS_LOCAL_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const { order, slots, locationOrder } = parsed as Partial<LocaisLocal>;
+    if (!order || typeof order !== "object" || !slots || typeof slots !== "object" || !Array.isArray(locationOrder)) return null;
+    return { order, slots, locationOrder };
+  } catch {
+    return null;
+  }
+}
+
+/** Returns false when the browser refused the write (private mode, blocked storage, quota),
+ * same signal as saveVersionStore above — this is the one write Locais can actually promise,
+ * so a caller has to be able to tell if even this failed. */
+export function saveLocaisLocal(next: LocaisLocal): boolean {
+  try {
+    window.localStorage.setItem(LOCAIS_LOCAL_KEY, JSON.stringify(next));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function loadActiveVersions(): Record<string, number> {
   try {
     if (typeof window === "undefined") return {};
@@ -357,13 +432,21 @@ export function saveActiveDrafts(drafts: Record<string, MapDraft>): boolean {
   }
 }
 
-/** Resolves a mission id for REAL play: an activated custom version takes precedence over
- * the immutable static/saved-file data, everywhere — the campaign list, the world map, and
- * the battle itself all call this same function, so "Ativar" in the editor is final
- * wherever the game shows or plays that scenario, not just where someone remembered to
- * special-case it. */
+/** Resolves a mission id for REAL play — the campaign list, the world map, and the battle
+ * itself all call this same function, so whatever it decides is final everywhere, not just
+ * where someone remembered to special-case it.
+ *
+ * A real saved FILE is the one durable, inspectable source of truth — per direct, explicit
+ * instruction, "the maps I save is the only thing that counts", full stop. It always wins
+ * over a browser-local activation now, which used to be checked first and could go stale in
+ * ways a file on disk can't (a leftover "Ativar" pointer from a much older session, still
+ * sitting in localStorage, silently overriding every file-based fix or edit made since —
+ * this is exactly what made a from-scratch fix to a map file look like it "didn't work").
+ * The local-activation path only still matters for a scenario that has NEVER been saved to a
+ * real file at all — a local-only save made with no dev server available to write one (a
+ * built app, a deployed preview) — which is the one case with no file to prefer instead. */
 export function missionById(id: string): Mission | undefined {
-  if (typeof window !== "undefined") {
+  if (!LATEST.has(id) && typeof window !== "undefined") {
     const exact = loadActiveDrafts()[id];
     if (exact) return draftToMission(exact);
 

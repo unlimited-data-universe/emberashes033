@@ -1,0 +1,97 @@
+{
+  "serial": 1,
+  "savedAt": 1789900100000,
+  "draft": {
+    "id": "random-encounter-7",
+    "index": 13,
+    "title": "O Andarilho Encapuzado",
+    "place": "Cruzamento do Santuário Caído",
+    "briefing": "Um santuário rachado marca onde duas trilhas se cruzam. Uma figura encapuzada espera sentada nas pedras — e não está sozinha por acaso.",
+    "objective": "Derrote todos os inimigos",
+    "win": "rout",
+    "hub": false,
+    "autoTactics": false,
+    "fog": true,
+    "locationId": "",
+    "cols": 12,
+    "rows": 9,
+    "tiles": [
+      "plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains",
+      "plains","woods","plains","plains","plains","plains","plains","plains","plains","plains","woods","plains",
+      "plains","plains","plains","plains","plains","ruins","ruins","plains","plains","plains","plains","plains",
+      "plains","plains","plains","plains","ruins","plains","plains","ruins","plains","plains","plains","plains",
+      "plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains",
+      "plains","plains","plains","plains","ruins","plains","plains","ruins","plains","plains","plains","plains",
+      "plains","plains","plains","plains","plains","ruins","ruins","plains","plains","plains","plains","plains",
+      "plains","woods","plains","plains","plains","plains","plains","plains","plains","plains","woods","plains",
+      "plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains"
+    ],
+    "tileVariants": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "decorations": [
+      { "id": "rune-stone", "x": 5, "y": 4 },
+      { "id": "rune-stone", "x": 6, "y": 4 }
+    ],
+    "playerSpawns": [
+      { "name": "Kael", "classId": "kaelFinal", "x": 1, "y": 5, "level": 10 },
+      { "name": "Neera", "classId": "neera", "x": 1, "y": 4, "level": 10 },
+      { "name": "Voss", "classId": "voss", "x": 1, "y": 6, "level": 10 },
+      { "name": "Salazar", "classId": "salazar", "x": 0, "y": 5, "level": 10 }
+    ],
+    "enemySpawns": [
+      { "name": "Cultista Ancestral", "classId": "cultistV2", "x": 10, "y": 3, "level": 9 },
+      { "name": "Cultista Ancestral", "classId": "cultistV2", "x": 10, "y": 6, "level": 9 }
+    ],
+    "neutralSpawns": [
+      {
+        "name": "Andarilho Encapuzado",
+        "classId": "sorcerer",
+        "x": 5,
+        "y": 5,
+        "dialog": {
+          "id": "hooded-wanderer",
+          "startId": "l1",
+          "lines": [
+            {
+              "id": "l1",
+              "speaker": "Andarilho Encapuzado",
+              "text": "\"Sentem os cascalhos frios embaixo desse santuário quebrado? Alguém rezou aqui, uma vez. Não adiantou.\"",
+              "replies": [
+                { "text": "Quem é você?", "next": "l2" },
+                { "text": "O que aconteceu aqui?", "next": "l3" },
+                { "text": "Não temos tempo pra isso.", "next": "l5" }
+              ]
+            },
+            {
+              "id": "l2",
+              "speaker": "Andarilho Encapuzado",
+              "text": "\"Alguém que ainda anda pelas estradas que os outros abandonaram. Um nome não vai mudar o que vem a seguir.\"",
+              "replies": [
+                { "text": "\"O que vem a seguir?\"", "next": "l4" },
+                { "text": "Deixa pra lá.", "next": "l5" }
+              ]
+            },
+            {
+              "id": "l3",
+              "speaker": "Andarilho Encapuzado",
+              "text": "\"Os cultistas vieram atrás de algo enterrado sob as pedras. Não encontraram — mas ainda estão procurando. Fiquem de olho.\"",
+              "next": "l5"
+            },
+            {
+              "id": "l4",
+              "speaker": "Andarilho Encapuzado",
+              "text": "\"Isso cabe a vocês descobrirem. Eu só aviso o que já vi passar por aqui antes — e nunca é bom sinal.\"",
+              "next": "l5"
+            },
+            {
+              "id": "l5",
+              "speaker": "Andarilho Encapuzado",
+              "text": "\"Cuidado com as sombras entre as pedras. Elas não são só sombras.\"",
+              "next": null
+            }
+          ]
+        }
+      }
+    ],
+    "tileRots": []
+  }
+}

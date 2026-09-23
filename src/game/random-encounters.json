@@ -45,7 +45,10 @@
       "name": "Estrada",
       "encounterIds": [
         "random-encounter-5",
-        "random-encounter-3"
+        "random-encounter-3",
+        "random-encounter-6",
+        "random-encounter-7",
+        "random-encounter-8"
       ]
     },
     {

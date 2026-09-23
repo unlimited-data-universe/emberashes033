@@ -1,0 +1,49 @@
+{
+  "serial": 1,
+  "savedAt": 1789900200000,
+  "draft": {
+    "id": "random-encounter-8",
+    "index": 13,
+    "title": "Uivos ao Anoitecer",
+    "place": "Trecho Uivante",
+    "briefing": "O sol se põe atrás dos pinheiros e um uivo responde a outro, e a outro. A matilha já sentiu o cheiro da coluna.",
+    "objective": "Derrote todos os inimigos",
+    "win": "rout",
+    "hub": false,
+    "autoTactics": false,
+    "fog": true,
+    "locationId": "",
+    "cols": 12,
+    "rows": 9,
+    "tiles": [
+      "woods","woods","plains","plains","plains","plains","plains","plains","plains","plains","woods","woods",
+      "woods","plains","plains","woods","plains","plains","plains","plains","woods","plains","plains","woods",
+      "plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains",
+      "plains","woods","plains","plains","plains","plains","plains","plains","plains","plains","woods","plains",
+      "plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains",
+      "plains","woods","plains","plains","plains","plains","plains","plains","plains","plains","woods","plains",
+      "plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains",
+      "woods","plains","plains","woods","plains","plains","plains","plains","woods","plains","plains","woods",
+      "woods","woods","plains","plains","plains","plains","plains","plains","plains","plains","woods","woods"
+    ],
+    "tileVariants": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "decorations": [
+      { "id": "wilds-fallen-log", "x": 4, "y": 2 },
+      { "id": "mossy-boulder", "x": 8, "y": 6 }
+    ],
+    "playerSpawns": [
+      { "name": "Kael", "classId": "kaelFinal", "x": 1, "y": 4, "level": 10 },
+      { "name": "Neera", "classId": "neera", "x": 1, "y": 3, "level": 10 },
+      { "name": "Voss", "classId": "voss", "x": 1, "y": 5, "level": 10 },
+      { "name": "Salazar", "classId": "salazar", "x": 0, "y": 4, "level": 10 }
+    ],
+    "enemySpawns": [
+      { "name": "Mordavian Puppy", "classId": "morvenianWolf", "x": 9, "y": 2, "level": 8 },
+      { "name": "Mordavian Puppy", "classId": "morvenianWolf", "x": 10, "y": 4, "level": 8 },
+      { "name": "Mordavian Puppy", "classId": "morvenianWolf", "x": 9, "y": 6, "level": 8 },
+      { "name": "Mordavian Puppy", "classId": "morvenianWolf", "x": 7, "y": 4, "level": 7 }
+    ],
+    "neutralSpawns": [],
+    "tileRots": []
+  }
+}

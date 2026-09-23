@@ -1,0 +1,50 @@
+{
+  "serial": 1,
+  "savedAt": 1789900000000,
+  "draft": {
+    "id": "random-encounter-6",
+    "index": 13,
+    "title": "Emboscada no Vau Raso",
+    "place": "Vau Raso",
+    "briefing": "A estrada mergulha num riacho largo e lento. No meio da água, uma carroça virada ainda pinga sangue fresco na correnteza — e os responsáveis não foram longe.",
+    "objective": "Derrote todos os inimigos",
+    "win": "rout",
+    "hub": false,
+    "autoTactics": false,
+    "fog": true,
+    "locationId": "",
+    "cols": 12,
+    "rows": 9,
+    "tiles": [
+      "plains","plains","plains","water","water","water","water","water","plains","plains","plains","plains",
+      "plains","plains","plains","water","water","water","water","water","plains","woods","plains","plains",
+      "plains","woods","plains","water","water","water","water","water","plains","plains","plains","plains",
+      "plains","plains","plains","water","water","water","water","water","plains","plains","woods","plains",
+      "plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains","plains",
+      "plains","woods","plains","water","water","water","water","water","plains","plains","plains","plains",
+      "plains","plains","plains","water","water","water","water","water","plains","woods","plains","plains",
+      "plains","plains","woods","water","water","water","water","water","plains","plains","plains","plains",
+      "plains","plains","plains","water","water","water","water","water","plains","plains","plains","plains"
+    ],
+    "tileVariants": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "decorations": [
+      { "id": "wilds-fallen-log", "x": 5, "y": 4 },
+      { "id": "mossy-boulder", "x": 1, "y": 6 },
+      { "id": "wilds-fallen-log", "x": 10, "y": 2 }
+    ],
+    "playerSpawns": [
+      { "name": "Kael", "classId": "kaelFinal", "x": 1, "y": 4, "level": 10 },
+      { "name": "Neera", "classId": "neera", "x": 1, "y": 3, "level": 10 },
+      { "name": "Voss", "classId": "voss", "x": 1, "y": 5, "level": 10 },
+      { "name": "Salazar", "classId": "salazar", "x": 0, "y": 4, "level": 10 }
+    ],
+    "enemySpawns": [
+      { "name": "Besteiro", "classId": "brigand", "x": 10, "y": 3, "level": 8 },
+      { "name": "Besteiro", "classId": "brigand", "x": 10, "y": 6, "level": 8 },
+      { "name": "Soldado", "classId": "soldier", "x": 9, "y": 4, "level": 8 },
+      { "name": "Carrasco", "classId": "punisher", "x": 11, "y": 4, "level": 9 }
+    ],
+    "neutralSpawns": [],
+    "tileRots": []
+  }
+}

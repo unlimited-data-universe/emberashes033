@@ -1,8 +1,18 @@
 import { useEffect, useRef } from "react";
-import { WEB_SHOT_TRAVEL, type BattleEngine } from "./engine";
+import type { BattleEngine } from "./engine";
 import { EffectsRenderer } from "./gfx/EffectsRenderer";
 import { WebGL2DRenderer } from "./gfx/WebGL2DRenderer";
+import { ThreeBattleRenderer } from "./gfx/three/ThreeBattleRenderer";
 import type { HudSnapshot } from "./types";
+
+/** Three.js is now the default ground/terrain renderer (see ThreeBattleRenderer's module
+ * comment) — everything else (elemental FX, units, HP bars, hover/selection highlight,
+ * decorations, mouse interaction) is untouched either way. `?renderer=legacy` falls back to the
+ * old Canvas2D-shim WebGL renderer for comparison while the migration is still being verified. */
+function useThreeGroundRenderer(): boolean {
+  if (typeof window === "undefined") return true;
+  return new URLSearchParams(window.location.search).get("renderer") !== "legacy";
+}
 
 export function BattleCanvas({
   engine,
@@ -29,9 +39,21 @@ export function BattleCanvas({
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
-    let renderer: WebGL2DRenderer;
+    const threeGround = useThreeGroundRenderer();
+    // Exactly one of these two is ever non-null for the lifetime of this effect — see
+    // useThreeGroundRenderer's comment. Both expose just enough surface (a resize call and a
+    // per-frame draw call) that the rest of this component barely has to branch on which one
+    // it's holding.
+    let renderer2D: WebGL2DRenderer | null = null;
+    let rendererThree: ThreeBattleRenderer | null = null;
     try {
-      renderer = new WebGL2DRenderer(canvas);
+      if (threeGround) {
+        rendererThree = new ThreeBattleRenderer(canvas, engine);
+        // Units stay on the transparent top canvas. Decorations stay in Three so Fog 2 can sit
+        // over every prop while remaining below every unit.
+        rendererThree.setSpritesAndDecorationsVisible(false, true);
+      }
+      else renderer2D = new WebGL2DRenderer(canvas);
     } catch {
       return;
     }
@@ -71,10 +93,11 @@ export function BattleCanvas({
       }
     }
 
-    // Dreaming Web's WebGL floor patch + travelling shot, unlike every other elemental FX
-    // here, are spawned/despawned live as the spell itself plays out rather than once at
-    // mount from an editor-authored placements list — see the sync inside loop() below.
-    const webFloorIds = new Map<string, number>();
+    // Dreaming Web's travelling shot, unlike every other elemental FX here, is spawned/
+    // despawned live as the spell itself plays out rather than once at mount from an editor-
+    // authored placements list — see the sync inside loop() below. The zone's own persistent
+    // floor patch is a real alpha-photo image stamped per-hex in BattleEngine.renderGround now
+    // (GameArt.webfloor), not a WebGL effect this canvas owns.
     let webShotId: number | null = null;
 
     let raf = 0;
@@ -131,11 +154,17 @@ export function BattleCanvas({
       const h = wrap.clientHeight;
       const pw = Math.max(1, Math.floor(w * dpr));
       const ph = Math.max(1, Math.floor(h * dpr));
-      canvas.width = pw;
-      canvas.height = ph;
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
-      renderer.setSize(pw, ph);
+      if (rendererThree) {
+        // Owns canvas.width/height itself (device pixels, via its own dpr bookkeeping) —
+        // see ThreeBattleRenderer.setSize.
+        rendererThree.setSize(w, h, dpr);
+      } else if (renderer2D) {
+        canvas.width = pw;
+        canvas.height = ph;
+        renderer2D.setSize(pw, ph);
+      }
       if (fxCanvas) {
         fx?.resize(w, h, dpr);
         fxCanvas.style.width = `${w}px`;
@@ -172,41 +201,18 @@ export function BattleCanvas({
         engine.tick(dt);
       }
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      renderer.clear();
-      engine.renderGround(renderer, wrap.clientWidth, wrap.clientHeight, dpr);
+      if (rendererThree) {
+        // Movement/attack/spell-range highlight and the active-turn ring are drawn as part of
+        // this call now (see ThreeBattleRenderer.syncOverlay) — real world-space hex meshes
+        // ordered between terrain and decorations, not a separate 2D overlay, so a blocking
+        // decoration or a unit standing on a highlighted hex stays visible on top of it instead
+        // of the highlight's tint painting over it.
+        rendererThree.render(wrap.clientWidth, wrap.clientHeight);
+      } else if (renderer2D) {
+        renderer2D.clear();
+        engine.renderGround(renderer2D, wrap.clientWidth, wrap.clientHeight, dpr);
+      }
       if (fx) {
-        // Dreaming Web's floor patch: one "web" WebGL effect per hex currently inside any live
-        // web zone, added/removed to track engine.webZones exactly — the only elemental FX kind
-        // whose placements change mid-battle instead of being fixed at mount. Only hexes the
-        // party has actually seen (explored: seen at least once and remembered, not just
-        // currently in sight) — otherwise the patch paints itself over fogged, unseen ground,
-        // which is what a camera pan into unexplored territory would reveal. The shot remains
-        // the cast tell: a zone's cells don't appear until WEB_SHOT_TRAVEL has actually elapsed
-        // since it was cast (see webZones' createdAt), so the floor patch shows up exactly when
-        // the travelling shot lands rather than popping in the instant the spell is cast.
-        const liveKeys = new Set<string>();
-        for (const zone of engine.webZones) {
-          if (zone.createdAt != null && engine.time < zone.createdAt + WEB_SHOT_TRAVEL) continue;
-          for (const k of zone.cells) {
-            const comma = k.indexOf(",");
-            const x = Number(k.slice(0, comma));
-            const y = Number(k.slice(comma + 1));
-            if (Number.isFinite(x) && Number.isFinite(y) && engine.explored(x, y)) liveKeys.add(k);
-          }
-        }
-        for (const k of liveKeys) {
-          if (webFloorIds.has(k)) continue;
-          const comma = k.indexOf(",");
-          const x = Number(k.slice(0, comma));
-          const y = Number(k.slice(comma + 1));
-          webFloorIds.set(k, fx.spawnEffect("web", x, y, { radiusTiles: 1.0 }));
-        }
-        for (const [k, id] of webFloorIds) {
-          if (!liveKeys.has(k)) {
-            fx.removeEffect(id);
-            webFloorIds.delete(k);
-          }
-        }
         // Dreaming Web's shot: one "webShot" beam, repositioned every frame via updateOverride
         // to follow the travelling missile's own timing (see BattleEngine.webShotBeam) — it
         // can't use the fixed getAnchor(col,row) model every other effect here relies on.
@@ -255,7 +261,20 @@ export function BattleCanvas({
       if (unitsRenderer && unitsCanvas) {
         unitsRenderer.setTransform(dpr, 0, 0, dpr, 0, 0);
         unitsRenderer.clear();
-        engine.renderUnitsAndOverlays(unitsRenderer, wrap.clientWidth, wrap.clientHeight);
+        engine.renderUnitsAndOverlays(
+          unitsRenderer,
+          wrap.clientWidth,
+          wrap.clientHeight,
+          fx ? (px: number, py: number) => fx.lightBoostAt(px, py, (col, row) => engine.effectAnchor(col, row)) : undefined,
+          // With Three, terrain and decorations remain in the bottom renderer so Fog 2 can sit
+          // over every prop. Units, bars and status effects stay here on the transparent top
+          // canvas, preserving the requested decoration → fog → unit layering.
+          !!rendererThree,
+          false,
+          !!rendererThree,
+          !!rendererThree,
+          !!rendererThree,
+        );
       }
       const hud = engine.getHud();
       const k = [
@@ -519,14 +538,182 @@ export function BattleCanvas({
       const w = window as Window & { __emberEngine?: BattleEngine };
       if (w.__emberEngine === engine) delete w.__emberEngine;
       fx?.dispose();
+      rendererThree?.dispose();
     };
   }, [engine, onHud, paused]);
+
+  // Mission.mistType === "vignette" (Map Editor's "Tipo de névoa") turns this from the always-on
+  // subtle diorama edge shading into an author-controlled hazy corner effect, driven by the same
+  // Névoa slider/intensity that would otherwise drive the world-space mist systems — see
+  // ThreeAtmosphere.ts's own comment on why "vignette" forces both of those to zero instead of
+  // stacking with this. Screen-space, tied to the viewport rather than world position, so the
+  // center (where the actual battle happens) is always guaranteed clear by construction — it
+  // never grows past clearRadius no matter how high intensity goes.
+  const isVignetteMist = engine.mission.mistType === "vignette";
+  const isVignette2Mist = engine.mission.mistType === "vignette2";
+  const isVignette3Mist = engine.mission.mistType === "vignette3";
+  const isVignette4Mist = engine.mission.mistType === "vignette4";
+  const vignetteIntensity = engine.mission.mistIntensity ?? 0.5;
+  // A proper vignette is a dependable screen-space radial falloff: foggy/dark around the full
+  // edge and completely clear at the battle's center. It deliberately avoids CSS masks and blend
+  // isolation, which was why the former animated treatment could disappear in some browsers.
+  const vignetteAlpha = Math.min(isVignette2Mist ? 0.46 : 0.52, 0.12 + vignetteIntensity * (isVignette2Mist ? 0.30 : 0.36));
+  const vignetteClearRadius = Math.max(isVignette2Mist ? 55 : 48, (isVignette2Mist ? 76 : 68) - vignetteIntensity * 14);
 
   return (
     <div ref={wrapRef} className="relative h-full w-full min-h-0 touch-none">
       <canvas ref={canvasRef} className="block h-full w-full touch-none" />
       <canvas ref={fxCanvasRef} className="pointer-events-none absolute inset-0 block h-full w-full touch-none" style={{ display: "none" }} />
       <canvas ref={unitsCanvasRef} className="pointer-events-none absolute inset-0 block h-full w-full touch-none" />
+      {/* Diorama color grade + vignette: a subtle warm key-light / cool shadow wash from the
+          same upper-left "sun" the unit/decoration relighting and cast shadows use (see
+          WebGL2DRenderer's lightDirX/Y and BattleEngine's shadowDirX/Y), plus a soft edge
+          vignette. Pure CSS, above every game canvas, non-interactive, and gentle enough
+          (soft-light / multiply, low alpha) to never wash out the art or UI underneath. */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(255,208,150,0.16) 0%, rgba(255,208,150,0) 32%, rgba(48,58,92,0) 55%, rgba(40,52,88,0.22) 100%)",
+          mixBlendMode: "soft-light",
+        }}
+      />
+      {/* A screen vignette belongs to the viewport rather than the world: it therefore covers the
+          complete painted backdrop and stays fixed while the map pans. */}
+      {isVignette2Mist && (
+        <>
+          <style>{`
+            @keyframes vignetteMistPulse { 0%, 100% { opacity: 0.88; } 50% { opacity: 1; } }
+            @keyframes vignetteFogDrift { 0%, 100% { transform: scale(1.06) translate3d(-2.5%, -1.5%, 0); } 50% { transform: scale(1.13) translate3d(2.5%, 1.5%, 0); } }
+            @keyframes vignetteFogDriftNear { 0%, 100% { transform: scale(1.16) translate3d(2.2%, -1.8%, 0); } 50% { transform: scale(1.24) translate3d(-2.4%, 2.1%, 0); } }
+            @keyframes vignette2FarDrift { 0%, 100% { transform: scale(1.12) translate3d(-4%, 2%, 0) rotate(-2deg); } 50% { transform: scale(1.24) translate3d(4%, -3%, 0) rotate(2deg); } }
+            @keyframes vignette2NearDrift { 0%, 100% { transform: scale(1.3) translate3d(4%, -3%, 0) rotate(3deg); } 50% { transform: scale(1.18) translate3d(-4%, 3%, 0) rotate(-2deg); } }
+          `}</style>
+          <div
+            className="pointer-events-none absolute inset-0 overflow-hidden"
+            style={{
+              background: isVignette2Mist
+                ? `radial-gradient(ellipse 118% 112% at 50% 46%, transparent ${vignetteClearRadius}%, rgba(96,108,108,${vignetteAlpha * 0.22}) 77%, rgba(14,19,22,${vignetteAlpha}) 100%)`
+                : `radial-gradient(ellipse 98% 92% at 50% 46%, transparent ${vignetteClearRadius}%, rgba(77,88,89,${vignetteAlpha * 0.42}) 76%, rgba(7,10,13,${vignetteAlpha}) 100%)`,
+              animation: "vignetteMistPulse 5.5s ease-in-out infinite",
+              zIndex: 5,
+            }}
+          >
+            {isVignette2Mist && (
+              <>
+                <img
+                  src="/game/assets/vignette-fog.png"
+                  alt=""
+                  draggable={false}
+                  className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+                  style={{
+                    opacity: 0.38 + vignetteIntensity * 0.23,
+                    animation: "vignette2FarDrift 24s ease-in-out infinite",
+                  }}
+                />
+                <img
+                  src="/game/assets/vignette-fog.png"
+                  alt=""
+                  draggable={false}
+                  className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+                  style={{
+                    opacity: 0.34 + vignetteIntensity * 0.18,
+                    animation: "vignette2NearDrift 31s ease-in-out infinite reverse",
+                  }}
+                />
+                <div
+                  className="pointer-events-none absolute -inset-[20%]"
+                  style={{
+                    background: `radial-gradient(ellipse 42% 30% at 8% 90%, rgba(164,178,174,${0.20 + vignetteIntensity * 0.14}) 0%, transparent 72%), radial-gradient(ellipse 38% 28% at 93% 8%, rgba(144,159,158,${0.16 + vignetteIntensity * 0.12}) 0%, transparent 74%)`,
+                    filter: "blur(18px)",
+                    animation: "vignette2FarDrift 27s ease-in-out infinite reverse",
+                    mixBlendMode: "screen",
+                  }}
+                />
+              </>
+            )}
+          </div>
+        </>
+      )}
+      {isVignetteMist && (
+        <>
+          <style>{`
+            @keyframes vignetteMistPulse { 0%, 100% { opacity: 0.88; } 50% { opacity: 1; } }
+            @keyframes vignetteFogDrift { 0%, 100% { transform: scale(1.06) translate3d(-2.5%, -1.5%, 0); } 50% { transform: scale(1.13) translate3d(2.5%, 1.5%, 0); } }
+            @keyframes vignetteFogDriftNear { 0%, 100% { transform: scale(1.16) translate3d(2.2%, -1.8%, 0); } 50% { transform: scale(1.24) translate3d(-2.4%, 2.1%, 0); } }
+          `}</style>
+          <div
+            className="pointer-events-none absolute inset-0 overflow-hidden"
+            style={{
+              background: `radial-gradient(ellipse 125% 115% at 50% 44%, transparent ${vignetteClearRadius}%, rgba(62,70,71,${vignetteAlpha * 0.34}) 78%, rgba(7,10,13,${vignetteAlpha}) 100%)`,
+              animation: "vignetteMistPulse 5.5s ease-in-out infinite",
+              zIndex: 5,
+            }}
+          >
+            <img
+              src="/game/assets/vignette-fog.png"
+              alt=""
+              draggable={false}
+              className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+              style={{
+                opacity: 0.68 + vignetteIntensity * 0.26,
+                animation: "vignetteFogDrift 13s ease-in-out infinite",
+              }}
+            />
+            <img
+              src="/game/assets/vignette-fog.png"
+              alt=""
+              draggable={false}
+              className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+              style={{
+                opacity: 0.22 + vignetteIntensity * 0.16,
+                animation: "vignetteFogDriftNear 19s ease-in-out infinite",
+              }}
+            />
+          </div>
+        </>
+      )}
+      {isVignette3Mist && (
+        <>
+          <style>{`
+            @keyframes vinheta3Drift { 0%, 100% { transform: scale(1.025) translate3d(-1.2%, 0.8%, 0); } 50% { transform: scale(1.07) translate3d(1.2%, -0.8%, 0); } }
+          `}</style>
+          <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ zIndex: 5 }}>
+            <img
+              src="/game/assets/vinheta-3-fog.png"
+              alt=""
+              draggable={false}
+              className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+              style={{
+                // One supplied artwork layer only. Its painted open center is deliberately
+                // preserved; it is never tiled, duplicated, mirrored, or masked into the board.
+                opacity: 0.38 + vignetteIntensity * 0.58,
+                animation: "vinheta3Drift 22s ease-in-out infinite",
+              }}
+            />
+          </div>
+        </>
+      )}
+      {isVignette4Mist && (
+        <>
+          <style>{`
+            @keyframes vinheta4Drift { 0%, 100% { transform: scale(1.02) translate3d(-0.8%, 0.6%, 0); opacity: .72; } 50% { transform: scale(1.06) translate3d(0.8%, -0.6%, 0); opacity: 1; } }
+          `}</style>
+          <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ zIndex: 5 }}>
+            <img
+              src="/game/assets/vinheta-4-fog.png"
+              alt=""
+              draggable={false}
+              className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+              style={{
+                opacity: 0.28 + vignetteIntensity * 0.52,
+                mixBlendMode: "screen",
+                animation: "vinheta4Drift 24s ease-in-out infinite",
+              }}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

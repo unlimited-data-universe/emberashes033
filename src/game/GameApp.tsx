@@ -1,17 +1,19 @@
-import { type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronDown, ChevronLeft, ChevronUp, Dices, Grip, ListOrdered, Pencil, RotateCcw, Shuffle, SlidersHorizontal, Swords, Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { loadGameArt, portraitFor, TILE_VARIANT_COUNT, tileVariantName, tileVariantSrc } from "./assets";
 import { getAudioVolumes, installAudioUnlock, playFile, playMenuMusic, playTheme, resumeAudio, setCutsceneVolume, setMusicVolume, setMuted, setSfxVolume, sfxPlay, stopMusic, unlockAudio } from "./audio";
 import { BattleCanvas } from "./BattleCanvas";
 import { ELEMENT_LABELS, PLACEABLE_ELEMENT_KINDS, type PlaceableElementKind } from "./gfx/params";
+import { DEFAULT_AMBIENT_INTENSITY, DEFAULT_BLOOM_INTENSITY, DEFAULT_SUN_INTENSITY } from "./gfx/three/ThreeBattleRenderer";
+import { getDevGfx, setDevGfx, subscribeDevGfx, type DevGfxSettings } from "./gfx/three/devGfx";
 import { InnScreen } from "./InnScreen";
 import { PartyInventoryOverlay, ItemTip } from "./InventoryScreens";
 import { DialogOverlay } from "./DialogOverlay";
 import { DialogEditor } from "./DialogEditor";
-import { BARRICADE_LIKE_DECOR, BIG_HOUSE_DECOR_IDS, CAUSTIC_VENOM, CHEST_LOOT, CLASSES, DEADWOODS_DECOR_IDS, CLEAVE, cleaveFormula, CURE_DISEASE, CURES, DECORATIONS, DOUBLE_STRIKE, doubleStrikeFormula, EQUIPMENT, EXP_TO_LEVEL, FIREBALL, formatSpellUseGains, HOUSE_DECOR_IDS, KILL_DROP_CHANCE, LIGHTNING, LIGHTNING_T3, LONG_SHOT, longShotFormula, MAGIC_MISSILE, PIERCING, piercingMul, PIERCING_THRUST, MAX_GRID, MAX_LEVEL, MIN_GRID, POTIONS, POTION_LOOT_WEIGHT, PROMOTE_LEVEL, PROMOTED_BASE, PROMOTIONS, rulesClass, SHOCK, STAT_POINTS_PER_LEVEL, SUMMON_FAMILIAR, SUMMON_FAMILIAR2, SWEEP, TRIP, TERRAIN, WEAPONS, WEAPON_MAX_ENH, WEB_OF_DREAMS, BAG_MAX, LOCKPICK_PRICE, POTION_CARRY_MAX, POTION_PRICE, RATION_STACK_MAX, RATIONS_PRICE, barricadeDecor, decorationCells, placedFootprint, decorationImage, diceFormula, emberForKill, enemyLevelFor, equippedPouchId, fireballFormula, healFormula, lightningFormula, lightningTier3Formula, dressMap, isSummonClass, MUSIC_TRACKS, SUMMON_CLASSES, parseLayout, potionLabel, potionTooltip, lockpickTooltip, partyBagHasRoom, pouchIcon, rangeLabel, rollPotion, sheetLine, spellFormula, spellIcon, spellTier, spellUseGains, startingBags, statsFor, terrainNote, tierKey, tierUses, weaponEnhCost, weaponSellValue, equipmentFitsSlot, gearStatBonus, MULTI_SHOT, multiShotFormula, SECOND_WIND, secondWindPct, auraPower, AURA_OF_PROTECTION, INTIMIDATING_PRESENCE, DIVINE_WRATH, divineWrathPower, SHOULDER_SMASH, shoulderSmashFormula, STAMPEDE, stampedeFormula, type SpellTier } from "./data";
+import { BARRICADE_LIKE_DECOR, BIG_HOUSE_DECOR_IDS, CAUSTIC_VENOM, CHEST_LOOT, CLASSES, DEADWOODS_DECOR_IDS, CLEAVE, cleaveFormula, CURE_DISEASE, CURES, DECORATIONS, DOUBLE_STRIKE, doubleStrikeFormula, EQUIPMENT, EXP_TO_LEVEL, FAMILIAR_SPELL, FIREBALL, formatSpellUseGains, LIFE_DRAIN, lifeDrainFormula, lifeDrainHealMul, HOUSE_DECOR_IDS, KILL_DROP_CHANCE, LIGHTNING, LIGHTNING_T3, LONG_SHOT, longShotFormula, MAGIC_MISSILE, PIERCING, piercingMul, PIERCING_THRUST, MAX_GRID, MAX_LEVEL, MIN_GRID, POTIONS, POTION_LOOT_WEIGHT, PROMOTE_LEVEL, PROMOTED_BASE, PROMOTIONS, rulesClass, SHOCK, STAT_POINTS_PER_LEVEL, SUMMON_FAMILIAR, PHANTASMAL_FORCE, PHANTASMAL_FORCE_UNLOCK_LEVEL, phantasmalForceFormula, SUMMON_FAMILIAR2, SUMMON_FAMILIAR2_UNLOCK_LEVEL, SUMMON_FAMILIAR3, SWEEP, TRIP, TERRAIN, WEAPONS, WEAPON_MAX_ENH, WEB_OF_DREAMS, BAG_MAX, LOCKPICK_PRICE, POTION_CARRY_MAX, POTION_PRICE, RATION_STACK_MAX, RATIONS_PRICE, barricadeDecor, decorationCells, placedFootprint, decorationImage, diceFormula, emberForKill, enemyLevelFor, equippedPouchId, fireballFormula, healFormula, lightningFormula, lightningTier3Formula, dressMap, isSummonClass, MUSIC_TRACKS, SUMMON_CLASSES, parseLayout, potionLabel, potionTooltip, lockpickTooltip, partyBagHasRoom, pouchIcon, rangeLabel, rollPotion, sheetLine, spellFormula, spellIcon, spellTier, spellUseGains, startingBags, statsFor, terrainNote, tierKey, tierUses, weaponEnhCost, weaponSellValue, equipmentFitsSlot, gearStatBonus, MULTI_SHOT, multiShotFormula, SECOND_WIND, secondWindPct, auraPower, AURA_OF_PROTECTION, INTIMIDATING_PRESENCE, DIVINE_WRATH, divineWrathPower, SHOULDER_SMASH, shoulderSmashFormula, STAMPEDE, stampedeFormula, type SpellTier } from "./data";
 import { BattleEngine } from "./engine";
-import { MapPreviewCanvas, type PreviewUnitSelection } from "./MapPreviewCanvas";
+import { MapPreviewCanvas, type PreviewDecorationSelection, type PreviewUnitSelection } from "./MapPreviewCanvas";
 import { WorldMapScreen } from "./WorldMapScreen";
 import { OverworldMapScreen } from "./OverworldMapScreen";
 import { LoadingCurtain, useLoadingCurtain } from "./MapLoadingOverlay";
@@ -20,7 +22,6 @@ import { buyInnMeal, fullness, useRation } from "./hunger";
 import { hungerPenaltyFor, partyIsFed, stepOverworld, teleportOverworld, type OverworldEvent } from "./overworld";
 import { GoldAmount } from "./GoldAmount";
 import { DISPLAY_VERSION } from "./version";
-import { useScene3DDemo } from "./gfx3d/useScene3DDemo";
 import {
   ALL_LOCATIONS,
   ALL_MISSIONS,
@@ -34,6 +35,7 @@ import {
   latestSerialFor,
   loadActiveDrafts,
   loadActiveVersions,
+  loadLocaisLocal,
   loadVersionStore,
   locationFill,
   locationForMission,
@@ -44,6 +46,7 @@ import {
   latestSavedDraft,
   saveActiveDrafts,
   saveActiveVersions,
+  saveLocaisLocal,
   saveVersionStore,
   savedScenarios,
   savedVersionsFor,
@@ -54,6 +57,24 @@ import {
   type MapVersion,
   type DraftSpawn,
 } from "./mapstore";
+
+/** The real latest saved draft for a scenario, asked from the dev server directly rather than
+ * trusted from latestSavedDraft's static snapshot — see the "Carregar mapa..."/"Abrir mapa
+ * salvo" pickers' own comments for why that snapshot goes stale the instant any save happens
+ * after this page loaded. Falls back to the stale snapshot only when there's no dev server to
+ * ask (a built release). Every "reopen this saved map in the editor" entry point should use
+ * this, not latestSavedDraft directly, or it silently reintroduces the same staleness. */
+async function fetchLatestDraft(id: string): Promise<MapDraft | undefined> {
+  try {
+    const response = await fetch(`/__map-list?id=${encodeURIComponent(id)}`);
+    const body = (await response.json()) as { ok?: boolean; files?: MapFile[] };
+    if (!response.ok || !body.ok || !Array.isArray(body.files) || body.files.length === 0) throw new Error("lista indisponível");
+    const latestFile = body.files.reduce((best: MapFile, f) => (f.serial > best.serial ? f : best));
+    return latestFile.draft;
+  } catch {
+    return latestSavedDraft(id);
+  }
+}
 import {
   activeSave,
   emptySave,
@@ -68,6 +89,7 @@ import {
   selectSlot,
 } from "./save";
 import type { Bag, BattleSnapshot, ClassId, DecorationPlacement, DialogTree, ElementalFxPlacement, EquipSlot, GameArt, GrowthLine, HudSnapshot, Mission, PotionId, SaveBank, SaveData, ScreenId, SpellKind, Spawn, SpriteId, StatPointAllocation, StatPointAttribute, TerrainId, UnitPublic, WinCondition, WorldLocation } from "./types";
+import { hexNeighbors, key as hexKey } from "./pathfinding";
 
 /** A map JSON write updates Vite's module list and can reload the app. This one-shot
  * snapshot restores the editor instead of sending the author to the title screen. */
@@ -343,6 +365,7 @@ const BRIEF_ART: Record<string, string> = {
   portao: "/game/assets/brief-portao.jpg",
   profundezas: "/game/assets/profundezas-bg.jpg?v=2",
   thebridge: "/game/assets/brief-thebridge.jpg?v=2",
+  "wisp-forest": "/game/assets/brief-wisp-forest.jpg",
 };
 
 function briefArt(id: string): string | null {
@@ -381,11 +404,24 @@ function classSpells(classId: ClassId): SpellKind[] {
       case "mage":
         return ["magicMissile", "lightning", "fireball", "causticVenom"];
       case "conjurer":
-        // Phantasmal Force / Summon Swarm (tiers 3-4) join this list as they're built — see
-        // SPELL_TIER for the intended tier assignment. summonFamiliar2 (Familiar Maior) is
-        // the first case of a class having more than one spell at the same tier (both tier
-        // 2, sharing that tier's pool of uses with webOfDreams).
-        return ["summonFamiliar", "webOfDreams", "summonFamiliar2"];
+        // Summon Swarm (tiers 3-4) joins this list as it's built — see SPELL_TIER for the
+        // intended tier assignment. Phantasmal Force is tier 1's own second spell (see
+        // PHANTASMAL_FORCE_UNLOCK_LEVEL — it shares tier 1's pool with summonFamiliar but
+        // isn't selectable/castable until level 2); summonFamiliar2 (Familiar Maior) is the
+        // same deal at tier 2 (shares that tier's pool of uses with webOfDreams).
+        return ["summonFamiliar", "phantasmalForce", "webOfDreams", "summonFamiliar2", "summonFamiliar3"];
+      case "familiar":
+        // Familiar's own hotbar, once summoned — Magic Missile is its only action beyond a
+        // plain attack (see FAMILIAR_SPELL/familiarMagicMissileCharges).
+        return ["magicMissile"];
+      case "familiar2":
+        // Familiar Maior's own hotbar — Magic Missile plus its own second spell, Toque
+        // Vampírico (see LIFE_DRAIN/familiarLifeDrainCharges), each with an independent
+        // charge pool.
+        return ["magicMissile", "lifeDrain"];
+      case "familiar3":
+        // The Big Guy's own hotbar, once summoned — its only action beyond a plain attack.
+        return ["fireball"];
       case "archer":
         return ["longShot", "piercing", "multiShot"];
       case "healer":
@@ -464,11 +500,21 @@ function slotIcon(action: SlotAction): string {
       return spellIcon("trip");
     case "summonFamiliar":
       return spellIcon("summon-familiar");
-    // No dedicated art yet for the tier-2 summon — reuses the same familiar icon.
+    // No dedicated art yet — reuses Magic Missile's own icon, closest in theme to a single
+    // ranged magic bolt.
+    case "phantasmalForce":
+      return spellIcon("magic-missile");
+    // No dedicated art yet for the tier-2/3 summons — each reuses the same familiar icon.
     case "summonFamiliar2":
+      return spellIcon("summon-familiar");
+    case "summonFamiliar3":
       return spellIcon("summon-familiar");
     case "webOfDreams":
       return spellIcon("web-of-dreams");
+    // Familiar Maior's own second spell — no dedicated art; reuses the cure icon since it's
+    // a heal-on-hit touch, closer in theme to a heal than to anything offensive here.
+    case "lifeDrain":
+      return spellIcon("cure-wounds");
     // No dedicated art exists yet for any of these — each reuses an existing icon whose
     // theme is closest (a zone effect, a big melee AOE, a holy/arcane burst). secondWind is
     // never actually shown (see PRESTIGE_SPELLS) but the switch must stay exhaustive.
@@ -527,10 +573,16 @@ function slotLabel(action: SlotAction): string {
       return TRIP.name;
     case "summonFamiliar":
       return SUMMON_FAMILIAR.name;
+    case "phantasmalForce":
+      return PHANTASMAL_FORCE.name;
     case "summonFamiliar2":
       return SUMMON_FAMILIAR2.name;
+    case "summonFamiliar3":
+      return SUMMON_FAMILIAR3.name;
     case "webOfDreams":
       return WEB_OF_DREAMS.name;
+    case "lifeDrain":
+      return LIFE_DRAIN.name;
     case "multiShot":
       return MULTI_SHOT.name;
     case "secondWind":
@@ -557,6 +609,23 @@ function slotTooltip(action: SlotAction): string {
 
 function slotCount(action: SlotAction, unit: UnitPublic): number {
   if (action.kind === "potion") return unit.bag[action.potion];
+  // A familiar's own spell (Fireball for Familiar Titã, Magic Missile for Familiar/Familiar
+  // Maior) draws from its own per-summon spellCharges, never the normal tier slot table
+  // (which stays all-zero for a summoned familiar) — see familiarSpellRemaining in engine.ts,
+  // which this has to agree with or the badge/disabled-state lies about what a click will
+  // actually do.
+  if (FAMILIAR_SPELL[unit.classId] === action.spell) return unit.spellCharges ?? 0;
+  // Familiar Maior's own second spell — its own dedicated lifeDrainCharges pool, never the
+  // FAMILIAR_SPELL/spellCharges pair above (that's reserved for the one own-spell every other
+  // familiar tier has) — see the lifeDrain guard in BattleEngine.startLifeDrain.
+  if (action.spell === "lifeDrain" && unit.classId === "familiar2") return unit.lifeDrainCharges ?? 0;
+  // Both share their tier's pool of uses with another tier-1/2 spell, but each unlocks later
+  // than that shared pool itself does (PHANTASMAL_FORCE_UNLOCK_LEVEL/SUMMON_FAMILIAR2_UNLOCK_
+  // LEVEL) — showing the raw tier count here would read as castable before it actually is,
+  // so the badge reads 0 until the caster's own level catches up, matching the guard in
+  // BattleEngine.startPhantasmalForce/startSummonFamiliar2.
+  if (action.spell === "phantasmalForce" && unit.level < PHANTASMAL_FORCE_UNLOCK_LEVEL) return 0;
+  if (action.spell === "summonFamiliar2" && unit.level < SUMMON_FAMILIAR2_UNLOCK_LEVEL) return 0;
   const tier = spellTier(action.spell);
   return tier ? unit.spells[tierKey(tier)] : 0;
 }
@@ -648,7 +717,14 @@ export function GameApp() {
   // map opens with that location's chapter list already popped open instead of the bare
   // map, so a multi-mission location plays as one continuous series of combats.
   const [openLocationOnMap, setOpenLocationOnMap] = useState<string | null>(null);
-  const [campaignLocations, setCampaignLocations] = useState<WorldLocation[]>(() => ALL_LOCATIONS);
+  // A Locais save made in an earlier session lives in localStorage (see saveLocaisLocal in
+  // mapstore.ts) — read it here too, not just in the editor's own order/slots/locationOrder
+  // state below, so the actual world map reflects it on a fresh load/reopen, not only while
+  // the editor itself is open and its "ember:locations-saved" event has fired this session.
+  const [campaignLocations, setCampaignLocations] = useState<WorldLocation[]>(() => {
+    const local = loadLocaisLocal();
+    return local ? locationsForOrder(local.order, local.locationOrder) : ALL_LOCATIONS;
+  });
   const [campaignMissionRevision, setCampaignMissionRevision] = useState(0);
   useEffect(() => {
     const applySavedLocations = (event: Event) => {
@@ -788,8 +864,58 @@ export function GameApp() {
     goToMap();
   };
 
+  /** Test mode's whole point is checking every hero's balance regardless of story progress,
+   * but a mission's own playerSpawns only ever lists whichever heroes the story had actually
+   * recruited by that point — no mission written before Aldric/Malrec join the party
+   * includes them, so they silently never appeared in a test battle at all. Adds whichever
+   * of the six are missing, each placed via the same nearest-free-cell BFS real spawns get
+   * nudged onto for a hazard (see BattleEngine.nudgeOffHazard) — never a hardcoded offset
+   * that could land on a wall, water, or another unit on a layout this never saw. */
+  const TEST_PARTY_CLASS: Record<string, ClassId> = { Kael: "kaelFinal", Neera: "neera", Voss: "voss", Salazar: "salazar", Aldric: "aldric", Malrec: "conjurer" };
+  function addMissingTestHeroes(mission: Mission): Mission {
+    const present = new Set(mission.playerSpawns.map((s) => s.name));
+    const missing = Object.keys(TEST_PARTY_CLASS).filter((name) => !present.has(name));
+    if (missing.length === 0) return mission;
+    const terrain = parseLayout(mission.layout);
+    const occupied = new Set([...mission.playerSpawns, ...mission.enemySpawns, ...(mission.neutralSpawns ?? [])].map((s) => hexKey(s.x, s.y)));
+    const anchor = mission.playerSpawns[0] ?? { x: 0, y: 0 };
+    const added: Spawn[] = [];
+    for (const name of missing) {
+      const seen = new Set([hexKey(anchor.x, anchor.y)]);
+      const q: { x: number; y: number }[] = [anchor];
+      let placed: { x: number; y: number } | null = null;
+      while (q.length && !placed) {
+        const cur = q.shift()!;
+        for (const n of hexNeighbors(cur.x, cur.y)) {
+          if (n.x < 0 || n.y < 0 || n.x >= mission.cols || n.y >= mission.rows) continue;
+          const k = hexKey(n.x, n.y);
+          if (seen.has(k)) continue;
+          seen.add(k);
+          const terr = TERRAIN[terrain[n.y * mission.cols + n.x]];
+          if (terr?.passable && !occupied.has(k)) {
+            placed = n;
+            break;
+          }
+          q.push(n);
+        }
+      }
+      if (!placed) continue; // no free cell anywhere reachable — skip rather than overlap
+      occupied.add(hexKey(placed.x, placed.y));
+      added.push({ name, classId: TEST_PARTY_CLASS[name]!, x: placed.x, y: placed.y });
+    }
+    return added.length > 0 ? { ...mission, playerSpawns: [...mission.playerSpawns, ...added] } : mission;
+  }
+
   const startBattle = useCallback(
-    (id: string, carried = save.unitHp, override?: Mission, playerLevels?: Record<string, number>, enemyLevels?: Record<string, number>, resume?: BattleSnapshot) => {
+    (
+      id: string,
+      carried = save.unitHp,
+      override?: Mission,
+      playerLevels?: Record<string, number>,
+      enemyLevels?: Record<number, number>,
+      neutralLevels?: Record<number, number>,
+      resume?: BattleSnapshot,
+    ) => {
       if (!art) return;
       // A real mission start (no override) always clears any leftover playtest identity —
       // otherwise a stale customMission from an earlier Map Editor session can collide
@@ -798,12 +924,19 @@ export function GameApp() {
       if (!override) {
         setCustomMission(null);
       }
-      const m = override ?? missionById(id);
-      if (!m) return;
+      const resolved = override ?? missionById(id);
+      if (!resolved) return;
+      const m = testMode ? addMissingTestHeroes(resolved) : resolved;
+      // !!! DO NOT change this back to `m.index + 1` (mission-position level) !!!
+      // Test mode exists so the party can be tested at full strength on ANY mission without
+      // grinding first — that means DEFAULT_TEST_LEVEL (see its own definition below, also
+      // commented), not "whatever level roughly matches this mission's spot in the campaign".
+      // This exact line has been reverted back to m.index + 1 by mistake multiple times
+      // across sessions — if you're about to "fix" or "simplify" this, don't; ask first.
       const levels: Record<string, number> = testMode
         ? override
-          ? Object.fromEntries(m.playerSpawns.map((s) => [s.name, playerLevels?.[s.name] ?? m.index + 1]))
-          : { Kael: m.index + 1, Neera: m.index + 1, Voss: m.index + 1, Salazar: m.index + 1 }
+          ? Object.fromEntries(m.playerSpawns.map((s) => [s.name, playerLevels?.[s.name] ?? DEFAULT_TEST_LEVEL]))
+          : Object.fromEntries(m.playerSpawns.map((s) => [s.name, DEFAULT_TEST_LEVEL]))
         : save.levels;
       const bags = testMode ? startingBags() : save.bags;
       // Partial progress toward the next level (not enough to level up yet) has to carry
@@ -858,7 +991,7 @@ export function GameApp() {
       const hungerPenaltyPct = testMode ? 0 : hungerPenaltyFor(save.hungerStreak);
       const heroHunger = testMode ? undefined : save.heroHunger;
       const heroDiseases = testMode ? undefined : save.heroDiseases;
-      const battle = new BattleEngine(m, art, { hp, levels, bags, xp, promotions, weapons, offHand, equipment, statPointAllocations, enemyLevels, ownedWeaponIds, spellSpent, hungerPenaltyPct, heroHunger, heroDiseases }, Date.now() % 100000);
+      const battle = new BattleEngine(m, art, { hp, levels, bags, xp, promotions, weapons, offHand, equipment, statPointAllocations, enemyLevels, neutralLevels, ownedWeaponIds, spellSpent, hungerPenaltyPct, heroHunger, heroDiseases }, Date.now() % 100000, testMode);
       if (resume && resume.missionId === m.id) battle.applySnapshot(resume);
       if (typeof window !== "undefined" && window.innerWidth < 720) battle.zoom = 0;
       awardedRef.current = null;
@@ -877,7 +1010,7 @@ export function GameApp() {
   useEffect(() => {
     const snap = resumeBattleRef.current;
     if (!art || !snap || !missionId) return;
-    startBattle(missionId, save.unitHp, undefined, undefined, undefined, snap);
+    startBattle(missionId, save.unitHp, undefined, undefined, undefined, undefined, snap);
     resumeBattleRef.current = null;
   }, [art, missionId, startBattle, save.unitHp]);
 
@@ -1136,22 +1269,14 @@ export function GameApp() {
     playMenuMusic();
   }, [screen, muted, missionId]);
 
-  // Routes to whichever map the player already picked this session, or to the mapChoice
-  // screen first if they haven't yet. Every "return to the map" spot in this file goes
-  // through here rather than naming "worldMap" directly, so both maps share one entry point.
+  // Routes to the mapChoice screen every time. Every "return to the map" spot in this file
+  // goes through here rather than naming "worldMap" directly, so both maps share one entry
+  // point. Deliberately asks on every single trip back (finished mission, the Inn, Debug,
+  // etc.), not just the first — by explicit request, so either map is always one pick away
+  // instead of getting locked in for the rest of the tab's session.
   const goToMap = useCallback(() => {
-    // Asked once, right when a campaign (real or test) actually starts — every later trip
-    // back to the map, from anywhere (a finished mission, the Inn, etc.), goes straight to
-    // whichever map was picked that first time. Test mode used to re-ask on every single
-    // return specifically so both maps stayed easy to reach for testing; picking one from
-    // the Map Editor's own test menu still works for that, so this no longer needs to nag
-    // on every trip back.
-    if (mapMode) {
-      setScreen(mapMode === "classic" ? "worldMap" : "overworldMap");
-      return;
-    }
     setScreen("mapChoice");
-  }, [mapMode]);
+  }, []);
 
   const leaveBoot = useCallback(() => {
     // Entering the world map is a hard music boundary: do not leave intro.mp3 under it.
@@ -1164,6 +1289,14 @@ export function GameApp() {
     stopMusic();
     playMenuMusic();
     setScreen("title");
+    // Wipe every trace of test mode the instant you leave it — testMode itself used to
+    // linger true here (only onNew/onContinue on the title screen ever cleared it, as a
+    // defensive afterthought), and testOverworld/testEmber stayed at whatever test mode
+    // left them, not reset until the next "Modo Teste" entry. None of it ever touches the
+    // real save, but it shouldn't outlive the session that made it either.
+    setTestMode(false);
+    setTestOverworld(null);
+    setTestEmber(TEST_EMBER);
   }, []);
 
   /** The base to start a fresh test-mode overworld/Inn session from: current roster/stats
@@ -1182,6 +1315,11 @@ export function GameApp() {
       rations: fresh.rations,
       hungerStreak: fresh.hungerStreak,
       exploredHexes: fresh.exploredHexes,
+      // Test mode always starts the party at DEFAULT_TEST_LEVEL, never whatever the real
+      // save slot's own progression happens to be (a fresh/new real game reads level 1 here
+      // otherwise, since this spreads ...save above) — the whole point of testing is having
+      // enough level to actually reach higher-tier spells/gear without grinding first.
+      levels: { Kael: DEFAULT_TEST_LEVEL, Neera: DEFAULT_TEST_LEVEL, Voss: DEFAULT_TEST_LEVEL, Salazar: DEFAULT_TEST_LEVEL, Aldric: DEFAULT_TEST_LEVEL, Malrec: DEFAULT_TEST_LEVEL },
     };
   }, [save, muted]);
   /** The save every map/Inn handler below reads: the real bank normally, or test mode's
@@ -1376,9 +1514,7 @@ export function GameApp() {
         />
       )}
 
-      {screen === "devControls" && (
-        <DevControlsScreen onBack={() => setScreen("testMenu")} />
-      )}
+      {screen === "devControls" && <DevControlsScreen onBack={() => setScreen("testMenu")} />}
 
       {screen === "mapChoice" && (
         <MapChoiceScreen
@@ -1418,9 +1554,9 @@ export function GameApp() {
             editorDraft.current = d;
           }}
           onBack={() => { clearEditorResume(); setScreen("testMenu"); }}
-          onPlaytest={(m, playerLevels, enemyLevels) => {
+          onPlaytest={(m, playerLevels, enemyLevels, neutralLevels) => {
             setCustomMission(m);
-            startBattle(m.id, {}, m, playerLevels, enemyLevels);
+            startBattle(m.id, {}, m, playerLevels, enemyLevels, neutralLevels);
           }}
         />
       )}
@@ -2207,6 +2343,7 @@ const SKILL_CLASS: Partial<Record<SpellKind, ClassId>> = {
   causticVenom: "mage",
   summonFamiliar: "conjurer",
   summonFamiliar2: "conjurer",
+  summonFamiliar3: "conjurer",
   webOfDreams: "conjurer",
   longShot: "archer",
   piercing: "archer",
@@ -2246,8 +2383,9 @@ const SKILL_DAMAGE_ROWS: { name: string; cls: ClassId; tier: SpellTier; formula:
     note: "Ataca duas vezes; cada acerto rola seu próprio bônus (não acumula).",
   },
   { name: PIERCING_THRUST.name, cls: SKILL_CLASS.piercingThrust!, tier: spellTier("piercingThrust")!, formula: `dano de arma, −${Math.round(PIERCING_THRUST.armorIgnore * 100)}% armadura`, note: "Acerta em linha; o segundo alvo recebe metade." },
-  { name: SUMMON_FAMILIAR.name, cls: SKILL_CLASS.summonFamiliar!, tier: spellTier("summonFamiliar")!, formula: "—", note: `Invoca aliado com ${Math.round(SUMMON_FAMILIAR.statScale * 100)}% dos atributos atuais.` },
-  { name: SUMMON_FAMILIAR2.name, cls: SKILL_CLASS.summonFamiliar2!, tier: spellTier("summonFamiliar2")!, formula: "—", note: `Invoca aliado maior, com ${Math.round(SUMMON_FAMILIAR2.statScale * 100)}% dos atributos atuais.` },
+  { name: SUMMON_FAMILIAR.name, cls: SKILL_CLASS.summonFamiliar!, tier: spellTier("summonFamiliar")!, formula: "—", note: `Invoca aliado com ${Math.round(SUMMON_FAMILIAR.statScale * 100)}% dos atributos atuais — pode lançar Míssil Mágico por conta própria.` },
+  { name: SUMMON_FAMILIAR2.name, cls: SKILL_CLASS.summonFamiliar2!, tier: spellTier("summonFamiliar2")!, formula: "—", note: `Invoca aliado maior, com ${Math.round(SUMMON_FAMILIAR2.statScale * 100)}% dos atributos atuais — pode lançar Míssil Mágico ou Dreno de Vida por conta própria.` },
+  { name: SUMMON_FAMILIAR3.name, cls: SKILL_CLASS.summonFamiliar3!, tier: spellTier("summonFamiliar3")!, formula: "—", note: `Invoca aliado com ${Math.round(SUMMON_FAMILIAR3.statScale * 100)}% dos atributos atuais — pode lançar Bola de Fogo por conta própria.` },
   {
     name: LIGHTNING.name,
     cls: SKILL_CLASS.lightning!,
@@ -2625,18 +2763,23 @@ function TestMenuScreen({
           className="text-left rounded-xl border border-border bg-bg/40 px-5 py-4 hover:border-accent"
         >
           <p className="font-display text-2xl leading-tight">Dev Controls</p>
-          <p className="text-sm text-muted mt-1">Protótipo 3D: liga/desliga PCF e contact shadows pra comparar.</p>
+          <p className="text-sm text-muted mt-1">Liga/desliga sombras do renderizador 3D pra comparar em combate.</p>
         </button>
       </div>
     </section>
   );
 }
 
-/** Dev-only screen: the HD-2D 3D proof-of-concept scene with its shadow-quality toggles as
- * real UI switches instead of keyboard shortcuts, so they're reachable from Test Mode
- * alongside Debug and Map Editor rather than only from the standalone /test3d route. */
+const DEV_GFX_ROWS: { key: keyof DevGfxSettings; label: string; hint: string }[] = [
+  { key: "realShadows", label: "Sombras reais", hint: "Sombra projetada pelo sol (unidades e props)." },
+  { key: "softShadows", label: "Sombras suaves (PCF)", hint: "Borda da sombra suavizada em vez de serrilhada." },
+  { key: "contactShadows", label: "Contact shadows", hint: "Mancha escura curta nos pés de cada unidade." },
+];
+
+/** Dev-only toggles for the battle renderer's shadow features (see gfx/three/devGfx.ts) —
+ * saved per-browser and applied live, so flip here then open a fight via Debug to compare. */
 function DevControlsScreen({ onBack }: { onBack: () => void }) {
-  const { canvasRef, pcfSoft, setPcfSoft, contactShadows, setContactShadows, gtao, setGTAO } = useScene3DDemo();
+  const gfx = useSyncExternalStore(subscribeDevGfx, getDevGfx);
   return (
     <section className="h-dvh min-h-0 flex flex-col bg-bg">
       <header className="flex items-center gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 border-b border-border">
@@ -2648,48 +2791,29 @@ function DevControlsScreen({ onBack }: { onBack: () => void }) {
           <h1 className="font-display text-3xl leading-none">Dev Controls</h1>
         </div>
       </header>
-      <div className="flex-1 min-h-0 relative bg-black">
-        <canvas ref={canvasRef} className="absolute inset-0 size-full" />
-        <div className="absolute top-4 right-4 w-72 rounded-xl border border-border bg-bg/85 backdrop-blur p-4 space-y-3">
-          <p className="text-sm uppercase tracking-[0.14em] text-muted">Shadow quality</p>
-          <DevToggleRow label="PCF soft shadows" enabled={pcfSoft} onChange={setPcfSoft} />
-          <DevToggleRow label="Contact shadows" enabled={contactShadows} onChange={setContactShadows} />
-          <DevToggleRow label="GTAO" enabled={gtao} onChange={setGTAO} />
-          <p className="text-xs text-muted leading-relaxed pt-1">
-            PCF suaviza a borda da sombra direcional já existente. Contact shadows reforça o
-            contato entre o personagem e o chão numa área curta. GTAO adiciona profundidade
-            local em interseções de geometria (post-processing). Nenhum dos três altera a
-            sombra direcional em si — dá pra comparar cada um isoladamente.
-          </p>
-        </div>
+      <div className="flex-1 min-h-0 flex flex-col justify-center gap-3 p-5 max-w-md mx-auto w-full">
+        <p className="text-sm uppercase tracking-[0.14em] text-muted">Sombras</p>
+        {DEV_GFX_ROWS.map((row) => (
+          <button
+            key={row.key}
+            type="button"
+            role="switch"
+            aria-checked={gfx[row.key]}
+            onClick={() => setDevGfx({ [row.key]: !gfx[row.key] })}
+            className="flex items-center gap-4 text-left rounded-xl border border-border bg-bg/40 px-5 py-4 hover:border-accent"
+          >
+            <span className="flex-1 min-w-0">
+              <span className="block font-display text-xl leading-tight">{row.label}</span>
+              <span className="block text-sm text-muted mt-1">{row.hint}</span>
+            </span>
+            <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${gfx[row.key] ? "bg-accent" : "bg-border"}`}>
+              <span className={`absolute top-0.5 size-5 rounded-full bg-bg transition-all ${gfx[row.key] ? "left-[1.375rem]" : "left-0.5"}`} />
+            </span>
+          </button>
+        ))}
+        <p className="text-xs text-muted leading-relaxed pt-1">Salvo neste navegador. Vale em qualquer combate com o renderizador 3D (padrão).</p>
       </div>
     </section>
-  );
-}
-
-function DevToggleRow({
-  label,
-  enabled,
-  onChange,
-}: {
-  label: string;
-  enabled: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-sm">{label}</span>
-      <button
-        type="button"
-        onClick={() => onChange(!enabled)}
-        aria-pressed={enabled}
-        className={`h-7 w-12 shrink-0 rounded-full border border-border relative transition-colors ${enabled ? "bg-accent" : "bg-surface-2"}`}
-      >
-        <span
-          className={`absolute top-0.5 size-5 rounded-full bg-bg transition-transform ${enabled ? "translate-x-[22px]" : "translate-x-0.5"}`}
-        />
-      </button>
-    </div>
   );
 }
 
@@ -2746,9 +2870,16 @@ const DECO_SHUFFLE_EXCLUDE_KEY = "ember-deco-shuffle-exclude";
 const EDITOR_COLS_DEFAULT = 20;
 const EDITOR_ROWS_DEFAULT = 20;
 
-/** Default level for a newly added spawn: enough spell slots unlocked to actually test
- * with, without being maxed out. */
-const DEFAULT_TEST_LEVEL = 10;
+/** Default level for a newly added spawn, and for every hero's level in test mode: enough
+ * spell slots unlocked to actually test with, without being maxed out.
+ *
+ * !!! THIS IS THE ONE PLACE TO CHANGE THE TEST-MODE LEVEL — never hardcode a level number
+ * anywhere else, and never let test mode fall back to a mission-position-based level
+ * (m.index + 1) instead of this constant. Test mode's entire point is full-strength testing
+ * on any mission with no grinding; reverting to a per-mission level defeats that and has
+ * happened by accident multiple times already. If a level-related bug shows up in test mode,
+ * fix it here or ask first — don't route around this constant. */
+const DEFAULT_TEST_LEVEL = 15;
 
 /** One canonical scenario prefix everywhere: the editor's ID becomes the exact file prefix.
  * `Vau 01` therefore saves as `vau-01001.json` only if the author actually made the ID
@@ -2792,6 +2923,16 @@ function blankDraft(): MapDraft {
     hub: false,
     autoTactics: true,
     fog: false,
+    environment: "outdoor",
+    sunIntensity: DEFAULT_SUN_INTENSITY,
+    ambientIntensity: DEFAULT_AMBIENT_INTENSITY,
+    mistIntensity: 0.2,
+    mistSpeed: 1,
+    mistType: "mist2",
+    bloomIntensity: DEFAULT_BLOOM_INTENSITY,
+    wispIntensity: 0.02,
+    wispSpeed: 1,
+    wispColor: 0xffa552,
     locationId: "",
     cols: EDITOR_COLS_DEFAULT,
     rows: EDITOR_ROWS_DEFAULT,
@@ -2836,6 +2977,16 @@ function missionToDraft(m: Mission): MapDraft {
     hub: !!m.hub,
     autoTactics: m.autoTactics !== false,
     fog: m.fog === true,
+    environment: m.environment === "indoor" ? "indoor" : "outdoor",
+    sunIntensity: m.sunIntensity ?? DEFAULT_SUN_INTENSITY,
+    ambientIntensity: m.ambientIntensity ?? DEFAULT_AMBIENT_INTENSITY,
+    mistIntensity: m.mistIntensity ?? 0.2,
+    mistSpeed: m.mistSpeed ?? 1,
+    mistType: m.mistType ?? "mist2",
+    bloomIntensity: m.bloomIntensity ?? DEFAULT_BLOOM_INTENSITY,
+    wispIntensity: m.wispIntensity ?? 0.02,
+    wispSpeed: m.wispSpeed ?? 1,
+    wispColor: m.wispColor ?? 0xffa552,
     locationId: locationForMission(m.id)?.id ?? "",
     cols: m.cols,
     rows: m.rows,
@@ -2984,11 +3135,7 @@ const TERRAIN_SWATCH: Record<TerrainId, string> = {
   column: "#4a4a52",
   nave: "#26262c",
   barricade: "#5a4630",
-  highwood: "#4a3f2a",
-  highruin: "#5f584c",
-  chest: "#7a5c2e",
   door: "#4a3524",
-  deadtree: "#4a3f2a",
   void: "#050505",
   snow: "#d8dee2",
 };
@@ -3006,9 +3153,12 @@ const BUILDER_TERRAIN: TerrainId[] = [
   // "barricade" is deliberately not here: it is a decoration now, placed with the Decoração
   // brush, which lays its terrain with it. Painting the bare tile still works — a map that
   // already had one keeps it, and the prop is derived on load — but authoring goes one way.
-  // "highwood"/"deadtree"/"highruin"/"chest" are the same story: dead-tree-large and the
-  // two chest decorations lay their own terrain, so the bare tiles are dropped from manual
-  // painting here. Existing maps keep whichever of these they already have.
+  // "chest" no longer exists as a TerrainId at all — a chest is purely a decoration
+  // (locked-chest/chest-medium/chest-large) that never touches the tile underneath it.
+  // highwood/deadtree/highruin used to be listed here too — retired entirely per direct
+  // instruction (they were mechanically identical to "hill", just three redundant visual
+  // reskins of it — see clearScrappedGroundTiles in data.ts, which converted every existing
+  // occurrence to hill + a matching decoration). They no longer exist as a TerrainId at all.
   "door",
   "void",
   "snow",
@@ -3114,7 +3264,7 @@ function MapEditorScreen({
 }: {
   art: GameArt;
   onBack: () => void;
-  onPlaytest: (m: Mission, playerLevels: Record<string, number>, enemyLevels: Record<string, number>) => void;
+  onPlaytest: (m: Mission, playerLevels: Record<string, number>, enemyLevels: Record<number, number>, neutralLevels: Record<number, number>) => void;
   /** The map to reopen with — what was being edited before a playtest took the screen away. */
   initialDraft?: MapDraft | null;
   onDraftChange?: (draft: MapDraft) => void;
@@ -3247,19 +3397,31 @@ function MapEditorScreen({
   const [showLocations, setShowLocations] = useState(false);
   const [showRandomEncounters, setShowRandomEncounters] = useState(false);
   const [encounterRegions, setEncounterRegions] = useState(() => RANDOM_ENCOUNTER_REGIONS);
+  // Locais' own guaranteed-local copy (see saveLocaisLocal's doc comment in mapstore.ts) —
+  // read once here so a returning session picks up wherever it last actually saved instead
+  // of the shipped/static defaults, same "localStorage wins over static data" precedence
+  // missionById already gives an activated map draft.
+  const locaisLocal = loadLocaisLocal();
   // Play order per location, keyed by location id. Seeded from what ALL_LOCATIONS resolved
   // to, so a location with no stored order still lists its missions in the order they play.
-  const [order, setOrder] = useState<Record<string, string[]>>(() =>
-    Object.fromEntries(ALL_LOCATIONS.map((l) => [l.id, [...l.missionIds]])),
+  const [order, setOrder] = useState<Record<string, string[]>>(
+    () => locaisLocal?.order ?? Object.fromEntries(ALL_LOCATIONS.map((l) => [l.id, [...l.missionIds]])),
   );
   // This is the chapter order between world-map markers. It is independent from the
   // missions listed inside each location and does not move the markers visually.
-  const [locationOrder, setLocationOrder] = useState<string[]>(() => ALL_LOCATIONS.map((location) => location.id));
+  const [locationOrder, setLocationOrder] = useState<string[]>(
+    () => locaisLocal?.locationOrder ?? ALL_LOCATIONS.map((location) => location.id),
+  );
 
   /** Writes src/game/map-order.json through the dev server. Config, not a version — a new
    * order replaces the old one rather than adding a serial. */
   const saveOrder = async (next: Record<string, string[]>) => {
     setOrder(next);
+    // The guaranteed save — see saveLocaisLocal's doc comment in mapstore.ts. Written and
+    // confirmed before the repo write is even attempted, so a missing/unreachable dev server
+    // never costs the author their change, only the bonus copy in src/game/map-order.json.
+    const localOk = saveLocaisLocal({ order: next, slots, locationOrder });
+    window.dispatchEvent(new CustomEvent("ember:locations-saved", { detail: { missionOrder: next, locationOrder } }));
     try {
       const res = await fetch("/__map-order", {
         method: "POST",
@@ -3268,13 +3430,12 @@ function MapEditorScreen({
       });
       const body = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !body.ok) {
-        setNote(`Não deu pra gravar a ordem: ${body.error ?? `HTTP ${res.status}`}`);
+        setNote(localOk ? "Ordem salva neste navegador." : `Não deu pra gravar a ordem: ${body.error ?? `HTTP ${res.status}`}`);
         return;
       }
-      window.dispatchEvent(new CustomEvent("ember:locations-saved", { detail: { missionOrder: next, locationOrder } }));
       setNote("Ordem das missões atualizada em src/game/map-order.json.");
-    } catch (err) {
-      setNote(`Sem servidor de dev — ordem não gravada (${err instanceof Error ? err.message : String(err)}).`);
+    } catch {
+      setNote(localOk ? "Ordem salva neste navegador (sem servidor de dev pro repositório)." : "NÃO SALVOU: nem localmente, nem no repositório.");
     }
   };
 
@@ -3362,17 +3523,6 @@ function MapEditorScreen({
   const latestRepoFile = repoFiles.reduce((best: MapFile | null, f) => (!best || f.savedAt > best.savedAt ? f : best), null);
   const latestVersion = versions.reduce((best: MapVersion | null, v) => (!best || v.savedAt > best.savedAt ? v : best), null);
   const trueLatestIsVersion = !!latestVersion && (!latestRepoFile || latestVersion.savedAt > latestRepoFile.savedAt);
-  /** Every scenario the picker can open, from either store. Files on disk are the real
-   * saves — a map authored offline exists only there — so they lead; a scenario that
-   * lives only in this browser (no dev server when it was saved) still gets a row. */
-  const pickable = (() => {
-    const rows = savedScenarios().map((s) => ({ id: s.id, files: s.files, local: (versionStore[s.id] ?? []).length }));
-    const seen = new Set(rows.map((r) => r.id));
-    for (const [id, list] of Object.entries(versionStore)) {
-      if (!seen.has(id) && list.length > 0) rows.push({ id, files: 0, local: list.length });
-    }
-    return rows.sort((a, b) => byName(a.id, b.id));
-  })();
   const [savedLocationMaps, setSavedLocationMaps] = useState<{ id: string; title: string; index: number }[]>(() =>
     savedScenarios().map((scenario) => ({ id: scenario.id, title: latestSavedDraft(scenario.id)?.title ?? scenario.id, index: latestSavedDraft(scenario.id)?.index ?? 0 })),
   );
@@ -3397,33 +3547,54 @@ function MapEditorScreen({
     }
     return ids;
   }, [order, locationOrder]);
-  /** Saved maps outside the campaign can be assigned to an encounter region. The region
-   * config itself is intentionally independent from world-map locations. */
-  const randomEncounterReferences = useMemo(
-    () => savedLocationMaps.filter((map) => !campaignIds.has(map.id)),
-    [campaignIds, savedLocationMaps],
-  );
-  // The campaign is filtered by Locais. The editor also exposes the two prepared
-  // reserve maps (R1 and R2), so they can be edited or assigned later without playing.
-  const campaignMapReferences = useMemo(() => {
-    const assignedEncounterIds = new Set(encounterRegions.flatMap((region) => region.encounterIds));
+  /** Every scenario the "Abrir mapa salvo" picker can open, from either store. Files on disk
+   * are the real saves — a map authored offline exists only there — so they lead; a scenario
+   * that lives only in this browser (no dev server when it was saved) still gets a row.
+   * Excludes anything already assigned to a Local — that's campanha's own dropdown's job
+   * (campaignMapReferences above), and a mission showing up in both was the whole complaint. */
+  const pickable = (() => {
+    const rows = savedScenarios()
+      .filter((s) => !campaignIds.has(s.id))
+      .map((s) => ({ id: s.id, files: s.files, local: (versionStore[s.id] ?? []).length }));
+    const seen = new Set(rows.map((r) => r.id));
+    for (const [id, list] of Object.entries(versionStore)) {
+      if (!seen.has(id) && !campaignIds.has(id) && list.length > 0) rows.push({ id, files: 0, local: list.length });
+    }
+    return rows.sort((a, b) => byName(a.id, b.id));
+  })();
+  /** Every "reserva" map: not in the campaign, full stop, no in-between — a saved-but-
+   * unassigned file (savedLocationMaps) or a shipped-but-unassigned mission (R1/R2 —
+   * "vertente"/"portao" — and anything else in ALL_MISSIONS never given to a Local). This is
+   * both the encounter-region assignment pool AND the Locais "Adicionar mapa…" (reserva)
+   * picker's source — a map only ever needs one "not yet campanha" list. */
+  const randomEncounterReferences = useMemo(() => {
     const known = new Map<string, { id: string; title: string; index: number }>();
-    for (const id of [...campaignIds, "vertente", "portao"]) {
+    for (const map of savedLocationMaps) if (!campaignIds.has(map.id)) known.set(map.id, map);
+    for (const m of ALL_MISSIONS) if (!m.hub && !campaignIds.has(m.id) && !known.has(m.id)) known.set(m.id, { id: m.id, title: m.title, index: m.index });
+    return [...known.values()].sort((a, b) => a.index - b.index || byName(a.title, b.title));
+  }, [campaignIds, savedLocationMaps]);
+  // ONLY missions actually assigned to a Local — the two dropdowns split on purpose (this
+  // one is campaign-only; "Abrir mapa salvo" below is every saved file, reserves and scratch
+  // maps included), so this must never pull in anything else again: not R1/R2 ("vertente"/
+  // "portao", prepared-but-unassigned reserve maps), not an arbitrary saved-but-unassigned
+  // map. Assigning something to a Local is what makes it campanha in the first place.
+  const campaignMapReferences = useMemo(() => {
+    const known = new Map<string, { id: string; title: string; index: number }>();
+    for (const id of campaignIds) {
       const mission = missionById(id);
       if (mission && !mission.hub) known.set(id, { id, title: mission.title, index: mission.index });
     }
-    // New saved maps remain available here so they can be assigned to a Local.
-    for (const map of savedLocationMaps) if (!assignedEncounterIds.has(map.id) && !known.has(map.id)) known.set(map.id, map);
     return [...known.values()].sort((a, b) => a.index - b.index || byName(a.title, b.title));
-  }, [campaignIds, encounterRegions, savedLocationMaps]);
+  }, [campaignIds]);
   const campaignLoadOptions = campaignMapReferences;
-  const [slots, setSlots] = useState<Record<string, number>>(LOCATION_SLOTS);
+  const [slots, setSlots] = useState<Record<string, number>>(() => locaisLocal?.slots ?? LOCATION_SLOTS);
 
   /** Declares how many missions a location is meant to hold, so the editor can show what
    * is still to author. Writes src/game/map-slots.json through the dev server — config,
    * not a version, so it replaces the previous count instead of adding a serial. */
   const doSaveSlots = async (next: Record<string, number>) => {
     setSlots(next);
+    const localOk = saveLocaisLocal({ order, slots: next, locationOrder });
     try {
       const res = await fetch("/__map-slots", {
         method: "POST",
@@ -3432,22 +3603,59 @@ function MapEditorScreen({
       });
       const body = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !body.ok) {
-        setNote(`Não deu pra gravar as vagas: ${body.error ?? `HTTP ${res.status}`}`);
+        setNote(localOk ? "Vagas salvas neste navegador." : `Não deu pra gravar as vagas: ${body.error ?? `HTTP ${res.status}`}`);
         return;
       }
       setNote("Vagas do local atualizadas em src/game/map-slots.json.");
-    } catch (err) {
-      setNote(`Sem servidor de dev — vagas não gravadas (${err instanceof Error ? err.message : String(err)}).`);
+    } catch {
+      setNote(localOk ? "Vagas salvas neste navegador (sem servidor de dev pro repositório)." : "NÃO SALVOU: nem localmente, nem no repositório.");
     }
   };
+  /** Re-reads the guaranteed-local Locais copy (see saveLocaisLocal in mapstore.ts) and
+   * replaces order/slots/locationOrder with exactly that — called right as the Locais screen
+   * opens (see its own onClick below), not just once at mount like these three useState
+   * initializers are. order/locationOrder/slots otherwise stay frozen at whatever they were
+   * the moment this component first mounted, for as long as the browser tab stays open —
+   * which can be hours into a session — so a save made from a DIFFERENT tab in the same
+   * browser (localStorage is shared browser-wide, same origin, across every tab) would
+   * never reach this one's own state. saveScenarios's "Salvar" then writes the *entire*
+   * current order/slots/locationOrder, every location included, so a location this tab
+   * never actually learned about — because some other tab saved it after this one
+   * mounted — would go out with whatever this tab's own stale stand-in for it was,
+   * silently reverting or erasing a real change. Confirmed by reproducing it. This closes
+   * that window from "however long the tab's been open" down to "however long the Locais
+   * screen's been open". No-op (leaves state as-is) if nothing has ever been saved locally
+   * yet. */
+  const refreshLocaisState = () => {
+    const fresh = loadLocaisLocal();
+    if (!fresh) return;
+    setOrder(fresh.order);
+    setSlots(fresh.slots);
+    setLocationOrder(fresh.locationOrder);
+  };
   /** Writes the Locais configuration — which missions each location holds, in what order,
-   * and how many it is meant to hold — and confirms it by what came back off disk.
-   *
-   * The order and slot writes already happen as you click, but silently: without a dev
-   * server they fail and the change lives only on screen until the tab closes. This is the
-   * deliberate one, and it says out loud whether the files exist afterwards. */
+   * and how many it is meant to hold. The local save (see saveLocaisLocal in mapstore.ts) is
+   * the one this promises: it always works, needs no dev server, and is what every other
+   * Locais/editor screen in this same browser reads from (see refreshLocaisState). The repo
+   * write (src/game/map-order.json etc., through the dev server) happens too when one is
+   * running — real files a build ships with — but it's a bonus on top, never the difference
+   * between "saved" and "NÃO SALVOU" the way it used to be. */
   const saveScenarios = async () => {
     setBigNote(null);
+    const localOk = saveLocaisLocal({ order, slots, locationOrder });
+    window.dispatchEvent(new CustomEvent("ember:locations-saved", { detail: { missionOrder: order, locationOrder } }));
+    if (!localOk) {
+      setBigNote({
+        ok: false,
+        title: "NÃO SALVOU",
+        lines: [
+          "O navegador recusou gravar (modo privado, armazenamento bloqueado ou cheio).",
+          "O texto abaixo é a sua configuração. Copie e guarde: cola numa conversa e eu gravo por você.",
+        ],
+        dump: JSON.stringify({ order, locationOrder, slots }, null, 2),
+      });
+      return;
+    }
     const post = async (route: string, payload: unknown) => {
       const res = await fetch(route, {
         method: "POST",
@@ -3464,28 +3672,25 @@ function MapEditorScreen({
       const lo = await post("/__location-order", locationOrder);
       const locais = Object.keys((o.onDisk as Record<string, unknown>) ?? {}).length;
       const vagas = Object.keys((sl.onDisk as Record<string, unknown>) ?? {}).length;
-      window.dispatchEvent(new CustomEvent("ember:locations-saved", { detail: { missionOrder: order, locationOrder } }));
       setBigNote({
         ok: true,
         title: "ESTÁ SALVO",
         lines: [
-          `${o.file} — ${locais} ${locais === 1 ? "local" : "locais"} com ordem definida`,
+          "Salvo neste navegador — vale já, sem precisar de servidor de dev.",
+          `Também gravado no repositório: ${o.file} — ${locais} ${locais === 1 ? "local" : "locais"} com ordem definida`,
           `${sl.file} — ${vagas} ${vagas === 1 ? "local" : "locais"} com vagas definidas`,
           `${lo.file} — sequência de locais da campanha confirmada`,
-          "Confirmado relendo os arquivos do disco, não é só promessa.",
         ],
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setBigNote({
-        ok: false,
-        title: "NÃO SALVOU",
+        ok: true,
+        title: "ESTÁ SALVO",
         lines: [
-          `Motivo: ${msg}`,
-          "Sem servidor de dev não há onde gravar — rodando pelo start.bat no PC, ou pelo Codespaces, funciona.",
-          "O texto abaixo é a sua configuração. Copie e guarde: cola numa conversa e eu gravo por você.",
+          "Salvo neste navegador — vale já, sem precisar de servidor de dev.",
+          `Não foi gravado no repositório (${msg}) — só afeta o arquivo que um build usaria; sua campanha já está valendo com a cópia local.`,
         ],
-        dump: JSON.stringify({ order, locationOrder, slots }, null, 2),
       });
     }
   };
@@ -3881,6 +4086,62 @@ function MapEditorScreen({
     updateSpawn(selected.side, selected.index, { x, y });
     setNote(`${current.name} movido para ${x},${y}.`);
   };
+
+  const selectPreviewDecoration = (decoration: PreviewDecorationSelection) => {
+    setSelectedPlacedDecoration(decoration);
+    const def = DECORATIONS[decoration.id];
+    setNote(`${def?.name ?? decoration.id} selecionada. Arraste até um hex vazio da prévia para movê-la.`);
+  };
+
+  /** Right-click-drag drop for an existing decoration, mirroring placePreviewUnit: refuses the
+   * same way a fresh placement or a turn would (see toggleDecoration/turnDecoration) — off the
+   * board or overlapping another prop — and re-stamps the terrain it carries under it the same
+   * way a turn does, since a moved house has to leave its climbable ground behind, not drag it. */
+  const placePreviewDecoration = (selected: PreviewDecorationSelection, x: number, y: number) => {
+    setDraft((d) => {
+      const hit = d.decorations.find(
+        (p) => p.id === selected.id && p.x === selected.x && p.y === selected.y && (p.rot ?? 0) === (selected.rot ?? 0),
+      );
+      if (!hit) {
+        setNote("Essa decoração já não está no mapa.");
+        return d;
+      }
+      const def = DECORATIONS[hit.id];
+      if (!def) return d;
+      if (hit.x === x && hit.y === y) return d;
+      const moved = { ...hit, x, y };
+      const before = placedFootprint(hit);
+      const after = placedFootprint(moved);
+      if (!after.every((f) => x + f.dx >= 0 && y + f.dy >= 0 && x + f.dx < d.cols && y + f.dy < d.rows)) {
+        setNote(`${def.name} não cabe aí — sairia do mapa.`);
+        return d;
+      }
+      const others = decorationCells(d.decorations.filter((p) => p !== hit));
+      for (const f of after) {
+        if (others.has(`${x + f.dx},${y + f.dy}`)) {
+          setNote(`${def.name} não cabe aí — bateria em outra decoração.`);
+          return d;
+        }
+      }
+      const tiles = [...d.tiles];
+      const tileVariants = [...d.tileVariants];
+      const tileRots = [...(d.tileRots ?? [])];
+      if (def.tile) {
+        const base = baseForDraft(d);
+        for (const f of before) {
+          const i = cellIndex(hit.x + f.dx, hit.y + f.dy, d.cols, d.rows);
+          if (i >= 0 && tiles[i] === def.tile) { tiles[i] = base.tile; tileVariants[i] = base.variant; tileRots[i] = 0; }
+        }
+        for (const f of after) {
+          const i = cellIndex(x + f.dx, y + f.dy, d.cols, d.rows);
+          if (i >= 0) tiles[i] = def.tile;
+        }
+      }
+      setSelectedPlacedDecoration(moved);
+      setNote(`${def.name} movida para ${x},${y}.`);
+      return { ...d, tiles, tileVariants, tileRots, decorations: d.decorations.map((p) => (p === hit ? moved : p)) };
+    });
+  };
   /** Drops one hero or the whole party on the bottom row. Worked out from the current draft
    * rather than inside the state updater: React runs that when it pleases, so counting
    * there reported on placements that had not happened yet. */
@@ -3928,16 +4189,20 @@ function MapEditorScreen({
     setVersionStore(next);
     const localOk = saveVersionStore(next);
 
-    // Once a scenario has been activated, later saves are edits to that active campaign
-    // scenario. Keep its exact snapshot current instead of leaving an older title/map
-    // frozen in localStorage until the author manually activates another version.
-    if (activeVersions[savedDraft.id]) {
-      const nextActive = { ...activeVersions, [savedDraft.id]: localSerial };
-      saveActiveDrafts({ ...loadActiveDrafts(), [savedDraft.id]: savedDraft });
-      saveActiveVersions(nextActive);
-      setActiveVersions(nextActive);
-      window.dispatchEvent(new CustomEvent("ember:missions-saved"));
-    }
+    // "Salvar" makes this the version that actually plays, full stop — no separate
+    // "Ativar" step required. That used to only happen for a scenario already activated
+    // once before (see doActivate/doActivateFile); a scenario saved for the first time
+    // kept the shipped/static mission (or whatever older version was last activated)
+    // live in the real campaign despite the editor confidently reporting "Salvo" — a
+    // save that looked successful but never actually reached the game, which is what was
+    // reading as "changes don't stick" / "reverts on reload" (missionById resolves real
+    // play from loadActiveDrafts()/ALL_MISSIONS, neither of which a plain, never-activated
+    // save ever touched — see missionById's own doc comment in mapstore.ts).
+    const nextActive = { ...activeVersions, [savedDraft.id]: localSerial };
+    saveActiveDrafts({ ...loadActiveDrafts(), [savedDraft.id]: savedDraft });
+    saveActiveVersions(nextActive);
+    setActiveVersions(nextActive);
+    window.dispatchEvent(new CustomEvent("ember:missions-saved"));
 
     armEditorResume(savedDraft);
     const repo = await saveMapToRepo(savedDraft);
@@ -4056,13 +4321,18 @@ function MapEditorScreen({
   // search in a dropdown. pt-BR collation so accents and case sort where a reader expects.
   const classOptions = (Object.keys(CLASSES) as ClassId[]).sort((a, b) => byName(CLASSES[a].name, CLASSES[b].name));
   const summonOptions = [...SUMMON_CLASSES].sort((a, b) => byName(CLASSES[a].name, CLASSES[b].name));
-  // A hero-identity classId (aldric, kaelFinal, conjurer, ...) deliberately keeps the same
-  // display name/role as the generic job it's a re-skin of (Aldric's own class is still
-  // named "Lanceiro", same as the plain Lancer enemy) — so any picker that just prints
-  // CLASSES[c].name is unfindable/ambiguous for that classId specifically. This map lets
-  // such a picker suffix the hero's own name onto their own classId's label only, leaving
-  // every generic classId's label untouched.
-  const heroNameByClassId: Partial<Record<ClassId, string>> = Object.fromEntries(EDITOR_HEROES.map((h) => [h.classId, h.name]));
+  // A named-individual classId (aldric, kaelFinal, conjurer, sandoval, ...) deliberately
+  // keeps the same display name/role as the generic job it's a re-skin of (Aldric's own
+  // class is still named "Lanceiro", same as the plain Lancer enemy; Sandoval's is
+  // "Lanceiro · Lanceiro rival · Chefe") — so any picker that just prints CLASSES[c].name is
+  // unfindable/ambiguous for that classId specifically. This map lets such a picker show
+  // that individual's own name for their own classId only, leaving every generic classId's
+  // label untouched. Covers every recruitable hero (EDITOR_HEROES) plus named non-recruit
+  // individuals who have their own classId/sprite but aren't a playable party option.
+  const NAMED_NON_HERO_CLASS_IDS: { name: string; classId: ClassId }[] = [{ name: "Sandoval", classId: "sandoval" }];
+  const heroNameByClassId: Partial<Record<ClassId, string>> = Object.fromEntries(
+    [...EDITOR_HEROES, ...NAMED_NON_HERO_CLASS_IDS].map((h) => [h.classId, h.name]),
+  );
   // One entry per distinct sprite (several classes share art — a promoted class, an
   // alternate skin), labeled by whichever class name reaches it first. Named heroes go
   // first so each of them claims their own sprite's slot under their own name — the
@@ -4166,7 +4436,14 @@ function MapEditorScreen({
           >
             Novo
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setShowLocations(true)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              refreshLocaisState();
+              setShowLocations(true);
+            }}
+          >
             Locais
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setShowRandomEncounters(true)}>
@@ -4209,8 +4486,25 @@ function MapEditorScreen({
           <select
             className="bg-bg border border-border rounded-md px-2 py-1.5"
             value=""
-            onChange={(e) => {
+            onChange={async (e) => {
               const id = e.target.value;
+              // Same staleness as the "Abrir mapa salvo" picker below (see its own comment) —
+              // latestSavedDraft reads mapstore.ts's eager import.meta.glob snapshot, frozen
+              // at page load and never refreshed by map-save-plugin.mjs's saves on purpose.
+              // Ask the dev server for the real latest file first; fall back to the stale
+              // snapshot only when there's none to ask (a built release).
+              try {
+                const response = await fetch(`/__map-list?id=${encodeURIComponent(id)}`);
+                const body = (await response.json()) as { ok?: boolean; files?: MapFile[] };
+                if (!response.ok || !body.ok || !Array.isArray(body.files) || body.files.length === 0) throw new Error("lista indisponível");
+                const latestFile = body.files.reduce((best: MapFile, f) => (f.serial > best.serial ? f : best));
+                const m = draftToMission(latestFile.draft);
+                setDraft(missionToDraft(m));
+                setNote(`Carregado "${m.title}" (${m.id}) no editor — ${m.cols}x${m.rows}.`);
+                return;
+              } catch {
+                // No dev server (built release) — fall back to the static snapshot.
+              }
               const saved = latestSavedDraft(id);
               // Saved drafts carry editor-only metadata such as the chosen replacement base.
               // Prefer that exact source when reopening a map, before its playable Mission view.
@@ -4220,7 +4514,7 @@ function MapEditorScreen({
               setNote(`Carregado "${m.title}" (${m.id}) no editor — ${m.cols}x${m.rows}.`);
             }}
           >
-            <option value="">Carregar mapa da campanha ou reserva…</option>
+            <option value="">Carregar mapa da campanha…</option>
             {campaignLoadOptions.map((map) => (
               <option key={map.id} value={map.id}>
                 {map.title}
@@ -4232,9 +4526,32 @@ function MapEditorScreen({
               className="flex-1 min-w-0 bg-bg border border-border rounded-md px-2 py-1.5"
               value=""
               title="Abre o save mais recente desse cenário — a lista de arquivos abaixo deixa escolher outro serial"
-              onChange={(e) => {
+              onChange={async (e) => {
                 const id = e.target.value;
                 if (!id) return;
+                // latestSavedDraft/latestSerialFor read mapstore.ts's eager import.meta.glob
+                // snapshot — taken once when this page/module loaded, and map-save-plugin.mjs
+                // deliberately suppresses the HMR that would normally refresh it on a map file
+                // write (see its handleHotUpdate: reloading the whole game on every save would
+                // throw the author out of the editor). That leaves this glob permanently stale
+                // the instant ANY save happens after page load — including a save from a
+                // different tab, or an earlier session — so it can silently open an older
+                // file than what's actually on disk (reads as "loads the first version I ever
+                // saved" instead of the latest). /__map-list?id= hits the disk directly, same
+                // as refreshRepoFiles already does for the "files in repository" panel, so
+                // it's asked first here too; the stale glob is now only the fallback for a
+                // built release with no dev server to ask.
+                try {
+                  const response = await fetch(`/__map-list?id=${encodeURIComponent(id)}`);
+                  const body = (await response.json()) as { ok?: boolean; files?: MapFile[] };
+                  if (!response.ok || !body.ok || !Array.isArray(body.files) || body.files.length === 0) throw new Error("lista indisponível");
+                  const latestFile = body.files.reduce((best: MapFile, f) => (f.serial > best.serial ? f : best));
+                  setDraft(latestFile.draft);
+                  setNote(`Aberto ${latestFile.file ?? mapFileName(id, latestFile.serial)} — o save mais novo de "${id}".`);
+                  return;
+                } catch {
+                  // No dev server (built release) — fall back to the static snapshot.
+                }
                 const fromDisk = latestSavedDraft(id);
                 if (fromDisk) {
                   setDraft(fromDisk);
@@ -4461,6 +4778,143 @@ function MapEditorScreen({
           </label>
         </div>
 
+        <div className="flex flex-col gap-2 mt-3 p-3 rounded-md border border-border bg-bg/40">
+          <span className="text-xs uppercase tracking-wide text-muted">Iluminação</span>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted w-28 shrink-0">Ambiente</span>
+            <select
+              className="bg-bg border border-border rounded-md px-2 py-1 flex-1"
+              value={draft.environment ?? "outdoor"}
+              onChange={(e) => {
+                const environment = e.target.value === "indoor" ? "indoor" : "outdoor";
+                setDraft((d) => ({ ...d, environment }));
+              }}
+            >
+              <option value="outdoor">Externo (sol forte, sombras marcadas)</option>
+              <option value="indoor">Interno (luz suave, sem sol direto)</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm" title="Força da luz do sol e de suas sombras — vai até um extremo de propósito">
+            <span className="text-muted w-28 shrink-0">Intensidade do sol</span>
+            <input
+              type="range"
+              min={0}
+              max={6}
+              step={0.1}
+              className="flex-1"
+              value={draft.sunIntensity ?? DEFAULT_SUN_INTENSITY}
+              onChange={(e) => setDraft((d) => ({ ...d, sunIntensity: Number(e.target.value) }))}
+            />
+            <span className="text-muted text-xs w-10 text-right">{(draft.sunIntensity ?? DEFAULT_SUN_INTENSITY).toFixed(2)}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm" title="Luz de preenchimento geral — vai até um extremo de propósito">
+            <span className="text-muted w-28 shrink-0">Luz ambiente</span>
+            <input
+              type="range"
+              min={0}
+              max={4}
+              step={0.1}
+              className="flex-1"
+              value={draft.ambientIntensity ?? DEFAULT_AMBIENT_INTENSITY}
+              onChange={(e) => setDraft((d) => ({ ...d, ambientIntensity: Number(e.target.value) }))}
+            />
+            <span className="text-muted text-xs w-10 text-right">{(draft.ambientIntensity ?? DEFAULT_AMBIENT_INTENSITY).toFixed(2)}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm" title="Brilho real de pós-processamento em superfícies claras/iluminadas — vai até um extremo de propósito">
+            <span className="text-muted w-28 shrink-0">Brilho (bloom)</span>
+            <input
+              type="range"
+              min={0}
+              max={3}
+              step={0.05}
+              className="flex-1"
+              value={draft.bloomIntensity ?? DEFAULT_BLOOM_INTENSITY}
+              onChange={(e) => setDraft((d) => ({ ...d, bloomIntensity: Number(e.target.value) }))}
+            />
+            <span className="text-muted text-xs w-10 text-right">{(draft.bloomIntensity ?? DEFAULT_BLOOM_INTENSITY).toFixed(2)}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm" title="Qual implementação de névoa esta missão usa">
+            <span className="text-muted w-28 shrink-0">Tipo de névoa</span>
+            <select
+              className="bg-bg border border-border rounded-md px-2 py-1 flex-1"
+              value={draft.mistType ?? "mist2"}
+              onChange={(e) => setDraft((d) => ({ ...d, mistType: e.target.value as "mist2" | "mist3" | "mist4" | "vignette" | "vignette2" | "vignette3" | "vignette4" }))}
+            >
+              <option value="mist2">Névoa 2 (textura suave, mundo inteiro)</option>
+              <option value="mist3">Névoa 3 (ruído original, mundo inteiro)</option>
+              <option value="mist4">Névoa 4 (vórtice nas bordas do mapa, centro sempre limpo)</option>
+              <option value="vignette">Vinheta (tela inteira, bordas suaves)</option>
+              <option value="vignette2">Vinheta 2 (bancos de névoa profundos, centro limpo)</option>
+              <option value="vignette3">Vinheta 3 (névoa rasteira em faixas, sem bordas escuras)</option>
+              <option value="vignette4">Vinheta 4 (névoa monocromática nas bordas)</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm" title="Névoa, só na batalha real (não aparece nesta prévia) — 1.0 é bem pesada de propósito">
+            <span className="text-muted w-28 shrink-0">Névoa</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.02}
+              className="flex-1"
+              value={draft.mistIntensity ?? 0}
+              onChange={(e) => setDraft((d) => ({ ...d, mistIntensity: Number(e.target.value) }))}
+            />
+            <span className="text-muted text-xs w-10 text-right">{(draft.mistIntensity ?? 0).toFixed(2)}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm" title="Velocidade da deriva da névoa — 1.0 é o ritmo padrão">
+            <span className="text-muted w-28 shrink-0">Vel. da névoa</span>
+            <input
+              type="range"
+              min={0.1}
+              max={4}
+              step={0.05}
+              className="flex-1"
+              value={draft.mistSpeed ?? 1}
+              onChange={(e) => setDraft((d) => ({ ...d, mistSpeed: Number(e.target.value) }))}
+            />
+            <span className="text-muted text-xs w-10 text-right">{(draft.mistSpeed ?? 1).toFixed(2)}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm" title="Partículas de brasa/wisp subindo, só na batalha real — 1.0 é uma tempestade delas de propósito">
+            <span className="text-muted w-28 shrink-0">Wisps</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.02}
+              className="flex-1"
+              value={draft.wispIntensity ?? 0}
+              onChange={(e) => setDraft((d) => ({ ...d, wispIntensity: Number(e.target.value) }))}
+            />
+            <span className="text-muted text-xs w-10 text-right">{(draft.wispIntensity ?? 0).toFixed(2)}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm" title="Velocidade da subida/deriva/desaparecimento dos wisps — 1.0 é o ritmo padrão">
+            <span className="text-muted w-28 shrink-0">Velocidade</span>
+            <input
+              type="range"
+              min={0.1}
+              max={4}
+              step={0.05}
+              className="flex-1"
+              value={draft.wispSpeed ?? 1}
+              onChange={(e) => setDraft((d) => ({ ...d, wispSpeed: Number(e.target.value) }))}
+            />
+            <span className="text-muted text-xs w-10 text-right">{(draft.wispSpeed ?? 1).toFixed(2)}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm" title="Cor exata dos wisps — sem mistura automática com a luz da cena">
+            <span className="text-muted w-28 shrink-0">Cor dos wisps</span>
+            <input
+              type="color"
+              className="h-8 w-14 bg-bg border border-border rounded-md p-0.5"
+              value={`#${(draft.wispColor ?? 0xffa552).toString(16).padStart(6, "0")}`}
+              onChange={(e) => setDraft((d) => ({ ...d, wispColor: Number.parseInt(e.target.value.slice(1), 16) }))}
+            />
+          </label>
+          <p className="text-xs text-muted">
+            Estes controles só valem para a batalha de verdade (ou "Testar"/Playtest) — esta prévia usa o renderizador 2D antigo e não muda com eles.
+          </p>
+        </div>
+
         <div className="flex items-center gap-2 text-sm">
           <label className="flex items-center gap-1">
             <span className="text-muted text-xs uppercase tracking-wide">Col</span>
@@ -4547,7 +5001,7 @@ function MapEditorScreen({
               </Button>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {BUILDER_TERRAIN.map((t) => (
+              {[...BUILDER_TERRAIN].sort((a, b) => byName(TERRAIN[a].name, TERRAIN[b].name)).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -4568,7 +5022,12 @@ function MapEditorScreen({
                 <span className="mt-1 text-muted uppercase tracking-wide">Versões</span>
                 <div className="h-28 min-h-[104px] min-w-0 flex-1 ember-scrollbar overflow-x-auto overflow-y-hidden rounded-md border border-border bg-bg/40 p-1.5">
                   <div className="grid grid-flow-col grid-rows-2 auto-cols-max gap-1.5">
-                    {Array.from({ length: TILE_VARIANT_COUNT[brush] ?? 1 }, (_, i) => (
+                    {/* Sorted by label for display only — each button still targets its own
+                        original variant index i (art file, saved-map value), so re-sorting
+                        this list can never relabel or repaint an existing tile. */}
+                    {Array.from({ length: TILE_VARIANT_COUNT[brush] ?? 1 }, (_, i) => i)
+                      .sort((a, b) => byName(VARIANT_LABEL[brush]?.[a] ?? String(a + 1).padStart(3, "0"), VARIANT_LABEL[brush]?.[b] ?? String(b + 1).padStart(3, "0")))
+                      .map((i) => (
                   <button
                     key={i}
                     type="button"
@@ -4733,8 +5192,7 @@ function MapEditorScreen({
                     ones flagged as summons, so the picker widens for that side only. */}
                 {(summonSide === "neutral" ? classOptions : summonOptions).map((c) => (
                   <option key={c} value={c}>
-                    {CLASSES[c].name} · {CLASSES[c].role}
-                    {heroNameByClassId[c] ? ` — ${heroNameByClassId[c]}` : ""}
+                    {heroNameByClassId[c] ?? `${CLASSES[c].name} · ${CLASSES[c].role}`}
                   </option>
                 ))}
               </select>
@@ -4851,6 +5309,8 @@ function MapEditorScreen({
                 selectedPlacedDecoration={selectedPlacedDecoration}
                 onUnitSelect={selectPreviewUnit}
                 onUnitPlace={placePreviewUnit}
+                onDecorationSelect={selectPreviewDecoration}
+                onDecorationPlace={placePreviewDecoration}
               />
             ) : (
               <div className="h-full w-full grid place-items-center text-xs text-muted">Carregando prévia…</div>
@@ -5041,12 +5501,20 @@ function MapEditorScreen({
                 <select
                   className="bg-bg border border-border rounded-md px-1.5 py-1"
                   value={s.classId}
-                  onChange={(e) => updateSpawn(side, i, { classId: e.target.value as ClassId })}
+                  // useClassSprite: true so the pick actually renders as that class/sprite
+                  // right away — a named hero (Aldric, Kael, ...) would otherwise keep
+                  // rendering as their own permanently pinned hero art (see
+                  // HERO_SPRITE_BY_NAME/resolveHeroSprite in engine.ts) no matter what class
+                  // is picked here, which is what the old separate "Sprite: Herói/Classe"
+                  // toggle button used to require an extra manual step to override. Per
+                  // direct instruction: whatever's picked in this selector IS the character,
+                  // no second step, and it's stored per-spawn (so it only affects this one
+                  // mission's draft, not the hero's real pinned art anywhere else).
+                  onChange={(e) => updateSpawn(side, i, { classId: e.target.value as ClassId, useClassSprite: true })}
                 >
                   {classOptions.map((c) => (
                     <option key={c} value={c}>
-                      {CLASSES[c].name} · {CLASSES[c].role}
-                      {heroNameByClassId[c] ? ` — ${heroNameByClassId[c]}` : ""}
+                      {heroNameByClassId[c] ?? `${CLASSES[c].name} · ${CLASSES[c].role}`}
                     </option>
                   ))}
                 </select>
@@ -5072,7 +5540,7 @@ function MapEditorScreen({
                       // exclusively to that hero, not to a shuffled mook.
                       const pool = classOptions.filter((c) => !isSummonClass(c) && !heroNameByClassId[c]);
                       const pick = pool[Math.floor(Math.random() * pool.length)] ?? s.classId;
-                      updateSpawn(side, i, { classId: pick });
+                      updateSpawn(side, i, { classId: pick, useClassSprite: true });
                     }}
                     className="text-muted hover:text-fg px-1.5"
                     aria-label="Sortear classe"
@@ -5247,13 +5715,14 @@ function MapEditorScreen({
             className="flex-1 h-[22px] px-2.5 text-xs min-w-0"
             onClick={() => {
               const playerLevels = Object.fromEntries(draft.playerSpawns.map((s) => [s.name, s.level]));
-              // Neutrals level off the same table as enemies — one of them may well end up
-              // fighting as one before the mission is over.
-              const enemyLevels = Object.fromEntries(
-                [...draft.enemySpawns, ...(draft.neutralSpawns ?? [])].map((s) => [s.name, s.level]),
-              );
+              // Keyed by spawn index, not name — enemy/neutral spawns routinely share a
+              // name (several "Piqueiro" on the same map), and a name-keyed map collapsed
+              // every same-named spawn's level onto one shared entry, silently dropping
+              // whatever the editor set for the others. See Roster.enemyLevels in engine.ts.
+              const enemyLevels = Object.fromEntries(draft.enemySpawns.map((s, i) => [i, s.level]));
+              const neutralLevels = Object.fromEntries((draft.neutralSpawns ?? []).map((s, i) => [i, s.level]));
               setNote("Testando — Encerrar teste nas Opções traz o mapa de volta como está.");
-              onPlaytest(draftToMission(draft), playerLevels, enemyLevels);
+              onPlaytest(draftToMission(draft), playerLevels, enemyLevels, neutralLevels);
             }}
           >
             Testar
@@ -5327,7 +5796,7 @@ function MapEditorScreen({
                         ↓
                       </button>
                     </div>
-                    <div className="mb-2 flex items-center gap-2">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
                       <Button
                         size="sm"
                         variant="quiet"
@@ -5351,28 +5820,55 @@ function MapEditorScreen({
                             place: loc.name,
                             locationId: loc.id,
                           });
-                          // The campaign structure is saved separately by "Salvar cenários".
-                          // Put this brand-new ID in that pending structure immediately, so
-                          // the button really does save the Local assignment the author chose.
-                          setOrder((current) => ({ ...current, [loc.id]: [...(current[loc.id] ?? []), mapId] }));
+                          // saveOrder (not setOrder) so the assignment reaches
+                          // src/game/map-order.json immediately — it used to only exist in
+                          // this component's state, undone by a reload unless the author
+                          // separately remembered "Salvar cenários" before leaving, which is
+                          // what was reading as "it never becomes a campaign map".
+                          void saveOrder({ ...order, [loc.id]: [...(order[loc.id] ?? []), mapId] });
                           setShowLocations(false);
-                          setNote(`Mapa novo criado para ${loc.name}. Salvar cenários grava a posição; Salvar mapa grava o conteúdo.`);
+                          setNote(`Mapa novo criado para ${loc.name} e já na campanha. Salvar mapa grava o conteúdo dele.`);
                         }}
                       >
                         Novo mapa aqui
                       </Button>
+                      {/* Two separate lists, not one merged pool — per direct instruction.
+                          "Adicionar mapa" is every map that HAS a save file but isn't in any
+                          Local's order yet (same "outside the campaign" set
+                          randomEncounterReferences already uses); "Adicionar mapa da
+                          campanha" is the opposite — a map already assigned to some OTHER
+                          Local, for moving it here instead. A map's only ever in one list at
+                          a time: joining a Local via either one is what makes it a campaign
+                          map, and it only leaves that set once removed from every Local. */}
                       <select
                         className="min-w-0 flex-1 bg-bg border border-border rounded px-1.5 py-1 text-xs"
                         value=""
-                        title="Coloca neste Local um cenário da campanha ou um mapa seu já salvo"
+                        title="Coloca neste Local um mapa seu já salvo que ainda não está na campanha"
                         onChange={(e) => {
                           const mapId = e.target.value;
                           e.target.value = "";
                           if (mapId) transferMission(mapId, loc.id);
                         }}
                       >
-                        <option value="">Adicionar cenário/mapa…</option>
-                        {campaignMapReferences.filter((map) => !ids.includes(map.id)).map((map) => (
+                        <option value="">Adicionar mapa…</option>
+                        {randomEncounterReferences.map((map) => (
+                          <option key={map.id} value={map.id}>
+                            {map.title} · {map.id}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="min-w-0 flex-1 bg-bg border border-border rounded px-1.5 py-1 text-xs"
+                        value=""
+                        title="Move pra este Local um mapa que já está em outro Local da campanha"
+                        onChange={(e) => {
+                          const mapId = e.target.value;
+                          e.target.value = "";
+                          if (mapId) transferMission(mapId, loc.id);
+                        }}
+                      >
+                        <option value="">Adicionar mapa da campanha…</option>
+                        {campaignMapReferences.filter((map) => campaignIds.has(map.id) && !ids.includes(map.id)).map((map) => (
                           <option key={map.id} value={map.id}>
                             {map.title} · {map.id}
                           </option>
@@ -5531,7 +6027,7 @@ function MapEditorScreen({
                         {maps.map((map, index) => (
                           <div key={map.id} className="flex items-center gap-1.5 text-xs bg-bg border border-border rounded-md px-2 py-1.5">
                             <span className="tabular-nums text-muted w-5 shrink-0">{index + 1}.</span>
-                            <button type="button" className="flex-1 min-w-0 truncate text-left" onClick={() => { const saved = latestSavedDraft(map.id); if (saved) { setDraft(saved); setShowRandomEncounters(false); } }} title="Abrir encontro no editor">{map.title}</button>
+                            <button type="button" className="flex-1 min-w-0 truncate text-left" onClick={async () => { const saved = await fetchLatestDraft(map.id); if (saved) { setDraft(saved); setShowRandomEncounters(false); } }} title="Abrir encontro no editor">{map.title}</button>
                             <button type="button" disabled={index === 0} onClick={() => { const next = [...region.encounterIds]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; updateRegion(next); }} className="px-1.5 rounded border border-border disabled:opacity-30" aria-label="Subir">↑</button>
                             <button type="button" disabled={index === maps.length - 1} onClick={() => { const next = [...region.encounterIds]; [next[index], next[index + 1]] = [next[index + 1]!, next[index]!]; updateRegion(next); }} className="px-1.5 rounded border border-border disabled:opacity-30" aria-label="Descer">↓</button>
                             <button type="button" onClick={() => updateRegion(region.encounterIds.filter((id) => id !== map.id))} className="px-1 rounded border border-border text-danger" aria-label={`Remover ${map.title}`}>✕</button>
@@ -5887,9 +6383,24 @@ function BattleScreen({
         const saved = hotbars[actor.name];
         const expectedSpells = classSpells(actor.classId);
         if (!saved) return defaultSlots(actor.classId);
-        // Repair hotbars persisted while a hero alias incorrectly resolved to no spells.
-        // Respect real customization: only auto-heal a bar containing zero spell actions.
-        if (expectedSpells.length > 0 && !saved.some((slot) => slot?.kind === "spell")) {
+        // Repair hotbars persisted while a hero alias incorrectly resolved to no spells, or
+        // to a stale class's spells (hotbars are keyed by hero NAME, not classId — a bar
+        // saved for a name before that hero's class was fixed elsewhere, e.g. Malrec once
+        // showing Lancer spells, stays wrong forever otherwise; there's no other trigger
+        // that would ever re-derive it). Respect real customization: only auto-heal a bar
+        // that has no spell actions at all, or contains one that doesn't actually belong to
+        // this class's current kit — a deliberately empty/potion-only slot is left alone.
+        const savedSpellKinds = saved.filter((slot): slot is Extract<SlotAction, { kind: "spell" }> => slot?.kind === "spell").map((slot) => slot.spell);
+        // hasStaleSpell alone has to be enough to trigger a repair — gating the whole check on
+        // expectedSpells.length > 0 (as this used to) meant a class with NO real spells at all
+        // (Familiar/Familiar Maior — plain melee summons, expectedSpells === []) could never
+        // self-heal a bar that picked up a stale spell under a colliding name (hotbars are
+        // keyed by unit NAME — see the comment above — and every conjurer's familiar of a given
+        // tier shares the same deterministic name, "Familiar de X", across every battle), so a
+        // spell like Magic Missile stuck on it stayed forever, always reading 0 uses since
+        // these classes never populate a real tier table for it to draw from.
+        const hasStaleSpell = savedSpellKinds.some((k) => !expectedSpells.includes(k));
+        if (hasStaleSpell || (expectedSpells.length > 0 && savedSpellKinds.length === 0)) {
           const repaired: (SlotAction | null)[] = [
             ...expectedSpells.map((spell): SlotAction => ({ kind: "spell", spell })),
             ...saved.filter((slot) => slot?.kind === "potion"),
@@ -5937,6 +6448,9 @@ function BattleScreen({
       case "magicMissile":
         engine.startMagicMissile();
         break;
+      case "lifeDrain":
+        engine.startLifeDrain();
+        break;
       case "longShot":
         engine.startLongShot();
         break;
@@ -5964,8 +6478,14 @@ function BattleScreen({
       case "summonFamiliar":
         engine.startSummonFamiliar();
         break;
+      case "phantasmalForce":
+        engine.startPhantasmalForce();
+        break;
       case "summonFamiliar2":
         engine.startSummonFamiliar2();
+        break;
+      case "summonFamiliar3":
+        engine.startSummonFamiliar3();
         break;
       case "webOfDreams":
         engine.startWebOfDreams();
@@ -6110,11 +6630,11 @@ function BattleScreen({
             </div>
           </div>
         )}
-        <div className="pointer-events-none absolute inset-x-2 top-[max(0.5rem,env(safe-area-inset-top))] flex items-start justify-end gap-1">
+        <div className="pointer-events-none absolute inset-x-2 top-[max(0.5rem,env(safe-area-inset-top))] z-20 flex items-start justify-end gap-1">
           <p className="bg-surface/90 border border-border rounded-md px-1.5 py-0.5 text-[10px] tabular-nums text-muted pointer-events-none">
             T{hud.turn} · {hud.playerAlive}/{hud.enemyAlive}
           </p>
-          {hud.terrain && (hud.terrain.note || hud.terrain.id === "barricade" || hud.terrain.id === "hill" || hud.terrain.id === "highwood" || hud.terrain.id === "highruin") && (
+          {hud.terrain && (hud.terrain.note || hud.terrain.id === "barricade" || hud.terrain.id === "hill") && (
             <p className="bg-surface/90 border border-border rounded-md px-1.5 py-0.5 text-[10px] text-accent pointer-events-none max-w-[14rem] truncate">
               {hud.terrain.name}
             </p>
@@ -6839,6 +7359,9 @@ function StatusPanel({ unit, statPointAllocation, unspentStatPoints, onAdjustSta
   const archer = base === "archer";
   const swordsman = base === "swordsman";
   const lancer = base === "lancer" || base === "aldric";
+  const familiar1 = unit.classId === "familiar";
+  const familiar2 = unit.classId === "familiar2";
+  const familiar3 = unit.classId === "familiar3";
   const condition = characterCondition(unit);
 
   return (
@@ -6855,10 +7378,9 @@ function StatusPanel({ unit, statPointAllocation, unspentStatPoints, onAdjustSta
               <div className="status-panel-portrait grid place-items-center overflow-hidden rounded-lg border border-border bg-black">
                 {/* Every portrait is treated as a 512×768 (2:3) source, cropped centered to
                     that ratio before it ever fills the box. For a file already 512×768 this
-                    crop is a no-op. Malrec's own 800×1000 file already reads correctly at
-                    natural scale — forcing it through this crop over-zooms his face, so his
-                    sprite skips it and renders plain, same as before. */}
-                {unit.sprite === "conjurer" ? (
+                    crop is a no-op. Malrec's face portrait reads correctly at its natural
+                    scale, so it fills the panel directly rather than being cropped again. */}
+                {unit.sprite === "conjurer" || unit.sprite === "malrec" ? (
                   <img src={portraitFor(unit.sprite).src} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <span className="block w-full shrink-0" style={{ aspectRatio: "2 / 3" }}>
@@ -7010,7 +7532,7 @@ function StatusPanel({ unit, statPointAllocation, unspentStatPoints, onAdjustSta
           ))}
         </div>
 
-        {unit.side === "player" && (swordsman || mage || conjurer || archer || healer || lancer) && (
+        {unit.side === "player" && (swordsman || mage || conjurer || archer || healer || lancer || familiar1 || familiar2 || familiar3) && (
           <>
             <p className="text-xs uppercase tracking-[0.18em] text-muted mb-2">Magias e habilidades</p>
             <div className="grid grid-cols-1 gap-1.5">
@@ -7086,6 +7608,14 @@ function StatusPanel({ unit, statPointAllocation, unspentStatPoints, onAdjustSta
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 bg-bg border border-border rounded-md px-2 py-1.5">
+                        <img src={spellIcon("magic-missile")} alt="" className="size-5 rounded-sm object-cover shrink-0" />
+                        <p className="text-xs leading-snug">
+                          {PHANTASMAL_FORCE.name} {phantasmalForceFormula(unit.level, unit.mag)}{" "}
+                          <span className="tabular-nums text-muted">×{unit.level >= PHANTASMAL_FORCE_UNLOCK_LEVEL ? unit.spells[tierKey(spellTier("phantasmalForce")!)] : 0}</span>
+                          {unit.level < PHANTASMAL_FORCE_UNLOCK_LEVEL && <span className="text-muted"> · nível {PHANTASMAL_FORCE_UNLOCK_LEVEL}+</span>}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-bg border border-border rounded-md px-2 py-1.5">
                         <img src={spellIcon("web-of-dreams")} alt="" className="size-5 rounded-sm object-cover shrink-0" />
                         <p className="text-xs truncate">
                           {WEB_OF_DREAMS.name} <span className="tabular-nums text-muted">×{unit.spells[tierKey(spellTier("webOfDreams")!)]}</span>
@@ -7094,10 +7624,44 @@ function StatusPanel({ unit, statPointAllocation, unspentStatPoints, onAdjustSta
                       <div className="flex items-center gap-1.5 bg-bg border border-border rounded-md px-2 py-1.5">
                         <img src={spellIcon("summon-familiar")} alt="" className="size-5 rounded-sm object-cover shrink-0" />
                         <p className="text-xs truncate">
-                          {SUMMON_FAMILIAR2.name} <span className="tabular-nums text-muted">×{unit.spells[tierKey(spellTier("summonFamiliar2")!)]}</span>
+                          {SUMMON_FAMILIAR2.name} <span className="tabular-nums text-muted">×{unit.level >= SUMMON_FAMILIAR2_UNLOCK_LEVEL ? unit.spells[tierKey(spellTier("summonFamiliar2")!)] : 0}</span>
+                          {unit.level < SUMMON_FAMILIAR2_UNLOCK_LEVEL && <span className="text-muted"> · nível {SUMMON_FAMILIAR2_UNLOCK_LEVEL}+</span>}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-bg border border-border rounded-md px-2 py-1.5">
+                        <img src={spellIcon("summon-familiar")} alt="" className="size-5 rounded-sm object-cover shrink-0" />
+                        <p className="text-xs truncate">
+                          {SUMMON_FAMILIAR3.name} <span className="tabular-nums text-muted">×{unit.spells[tierKey(spellTier("summonFamiliar3")!)]}</span>
                         </p>
                       </div>
                     </>
+                  )}
+                  {(familiar1 || familiar2) && (
+                    <div className="flex items-center gap-1.5 bg-bg border border-border rounded-md px-2 py-1.5">
+                      <img src={spellIcon("magic-missile")} alt="" className="size-5 rounded-sm object-cover shrink-0" />
+                      <p className="text-xs leading-snug">
+                        {MAGIC_MISSILE.name} {damageFormula(unit.mag, MAGIC_MISSILE.mul, MAGIC_MISSILE.dice, MAGIC_MISSILE.faces, MAGIC_MISSILE.bonus)}{" "}
+                        <span className="tabular-nums text-muted">×{unit.spellCharges ?? 0}</span>
+                      </p>
+                    </div>
+                  )}
+                  {familiar2 && (
+                    <div className="flex items-center gap-1.5 bg-bg border border-border rounded-md px-2 py-1.5">
+                      <img src={spellIcon("cure-wounds")} alt="" className="size-5 rounded-sm object-cover shrink-0" />
+                      <p className="text-xs leading-snug">
+                        {LIFE_DRAIN.name} {lifeDrainFormula(unit.level, unit.mag)} · cura {Math.round(lifeDrainHealMul(unit.level) * 100)}% do dano{" "}
+                        <span className="tabular-nums text-muted">×{unit.lifeDrainCharges ?? 0}</span>
+                      </p>
+                    </div>
+                  )}
+                  {familiar3 && (
+                    <div className="flex items-center gap-1.5 bg-bg border border-border rounded-md px-2 py-1.5">
+                      <img src={spellIcon("fireball")} alt="" className="size-5 rounded-sm object-cover shrink-0" />
+                      <p className="text-xs leading-snug">
+                        Fogo {damageFormula(unit.mag, FIREBALL.mul, FIREBALL.dice, FIREBALL.faces, FIREBALL.bonus)}{" "}
+                        <span className="tabular-nums text-muted">×{unit.spellCharges ?? 0}</span>
+                      </p>
+                    </div>
                   )}
                   {archer && (
                     <>

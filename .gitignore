@@ -8,4 +8,19 @@ release/
 
 .vercel/
 log.txt
-.tanstack/
+
+# Working/scratch content, not part of the shipped app (raw reference art & video,
+# tool-session outputs, QA captures, unrelated tool config, stray root drops) — kept
+# on disk locally, just not pushed to the repo.
+/attachments/
+/artifacts/
+/screenshots/
+/Titles/
+/Sound FX/
+.node_modules.lock
+/claude
+/*.jpg
+/*.jpeg
+/*.png
+/*.gif
+/*.mp4

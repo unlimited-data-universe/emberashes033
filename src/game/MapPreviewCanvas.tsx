@@ -1,6 +1,8 @@
 import { type PointerEvent, useEffect, useRef, useState } from "react";
+import { placedFootprint } from "./data";
 import { BattleEngine } from "./engine";
 import { EffectsRenderer } from "./gfx/EffectsRenderer";
+import { WebGL2DRenderer } from "./gfx/WebGL2DRenderer";
 import type { GameArt, Mission } from "./types";
 
 export type PreviewUnitSelection = {
@@ -8,6 +10,8 @@ export type PreviewUnitSelection = {
   index: number;
   name: string;
 };
+
+export type PreviewDecorationSelection = { id: string; x: number; y: number; rot?: number };
 
 // The technical map is a native scroll surface; keep preview scrollbar travel deliberately gentler.
 const PREVIEW_SCROLL_PAN_RATE = 0.45;
@@ -18,14 +22,28 @@ const PREVIEW_SCROLL_PAN_RATE = 0.45;
  * render(), never tick(): no animation loop, no AI, no turns — just a live snapshot that
  * redraws whenever the mission prop changes (the caller debounces that) or the panel resizes.
  * A left click can use the current editor brush directly; gameplay state remains untouched. */
-export function MapPreviewCanvas({ mission, art, onCellClick, selectedDecorationId, selectedPlacedDecoration, onUnitSelect, onUnitPlace }: {
+export function MapPreviewCanvas({
+  mission,
+  art,
+  onCellClick,
+  selectedDecorationId,
+  selectedPlacedDecoration,
+  onUnitSelect,
+  onUnitPlace,
+  onDecorationSelect,
+  onDecorationPlace,
+}: {
   mission: Mission;
   art: GameArt;
   onCellClick?: (x: number, y: number) => void;
   selectedDecorationId?: string;
-  selectedPlacedDecoration?: { id: string; x: number; y: number; rot?: number } | null;
+  selectedPlacedDecoration?: PreviewDecorationSelection | null;
   onUnitSelect?: (unit: PreviewUnitSelection) => void;
   onUnitPlace?: (unit: PreviewUnitSelection, x: number, y: number) => void;
+  /** Right-click-drag pickup, mirroring onUnitSelect for units: fires as soon as an existing
+   * placement is grabbed, before it's known where it'll be dropped. */
+  onDecorationSelect?: (decoration: PreviewDecorationSelection) => void;
+  onDecorationPlace?: (decoration: PreviewDecorationSelection, x: number, y: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fxCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,6 +53,7 @@ export function MapPreviewCanvas({ mission, art, onCellClick, selectedDecoration
   const redrawRef = useRef<(() => void) | null>(null);
   const dragRef = useRef<{ pointerId: number; x: number; y: number; startX: number; startY: number; armed: boolean; moved: boolean } | null>(null);
   const unitDragRef = useRef<{ pointerId: number; unit: PreviewUnitSelection } | null>(null);
+  const decorationDragRef = useRef<{ pointerId: number; decoration: PreviewDecorationSelection } | null>(null);
   const cameraRef = useRef<{ x: number; y: number } | null>(null);
   const verticalScrollTopRef = useRef(0);
   const horizontalScrollLeftRef = useRef(0);
@@ -42,7 +61,7 @@ export function MapPreviewCanvas({ mission, art, onCellClick, selectedDecoration
   const armTimerRef = useRef<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
-  const [isUnitDragging, setIsUnitDragging] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   // Same board size the engine itself renders at (see BattleEngine.boardSize) — the scroll
   // surface only grows past its window when the real board is actually bigger than it.
   const previewTileRadius = zoom < 1.125 ? 34 : zoom < 1.375 ? 50 : 72;
@@ -67,18 +86,36 @@ export function MapPreviewCanvas({ mission, art, onCellClick, selectedDecoration
     }
     return null;
   };
+  const decorationAt = (x: number, y: number): PreviewDecorationSelection | null => {
+    const hit = (mission.decorations ?? []).find((p) => placedFootprint(p).some((f) => p.x + f.dx === x && p.y + f.dy === y));
+    return hit ? { id: hit.id, x: hit.x, y: hit.y, rot: hit.rot } : null;
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const viewport = viewportRef.current;
     if (!canvas || !viewport) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    // Same WebGL2D wrapper BattleCanvas renders through (see WebGL2DRenderer) rather than a
+    // native CanvasRenderingContext2D — the engine's render methods lean on wrapper-only
+    // extensions like drawImageLit for sprite relighting that a plain 2d context doesn't have.
+    let ctx: WebGL2DRenderer;
+    try {
+      ctx = new WebGL2DRenderer(canvas);
+    } catch {
+      return;
+    }
     // See BattleCanvas for why: units/foreground decorations get their own transparent
     // canvas above the FX layer, so a Water/Fire/etc placement can't paint over them
     // regardless of draw order.
     const unitsCanvas = unitsCanvasRef.current;
-    const unitsCtx = unitsCanvas?.getContext("2d") ?? null;
+    let unitsCtx: WebGL2DRenderer | null = null;
+    if (unitsCanvas) {
+      try {
+        unitsCtx = new WebGL2DRenderer(unitsCanvas);
+      } catch {
+        unitsCtx = null;
+      }
+    }
 
     let engine: BattleEngine;
     try {
@@ -117,15 +154,19 @@ export function MapPreviewCanvas({ mission, art, onCellClick, selectedDecoration
       canvas.height = Math.max(1, Math.floor(h * dpr));
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
-      if (unitsCanvas) {
+      ctx.setSize(canvas.width, canvas.height);
+      if (unitsCanvas && unitsCtx) {
         unitsCanvas.width = Math.max(1, Math.floor(w * dpr));
         unitsCanvas.height = Math.max(1, Math.floor(h * dpr));
         unitsCanvas.style.width = `${w}px`;
         unitsCanvas.style.height = `${h}px`;
+        unitsCtx.setSize(unitsCanvas.width, unitsCanvas.height);
       }
       const drawGroundAndUnits = () => {
+        ctx.clear();
         engine.renderGround(ctx, w, h, dpr);
         if (unitsCtx && unitsCanvas) {
+          unitsCtx.clear();
           unitsCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
           unitsCtx.clearRect(0, 0, w, h);
           engine.renderUnitsAndOverlays(unitsCtx, w, h);
@@ -218,11 +259,20 @@ export function MapPreviewCanvas({ mission, art, onCellClick, selectedDecoration
       const cell = engine.cellAt(event.clientX - rect.left, event.clientY - rect.top);
       if (!cell) return;
       const unit = unitAt(cell.x, cell.y);
-      if (!unit) return;
-      unitDragRef.current = { pointerId: event.pointerId, unit };
-      viewport.setPointerCapture(event.pointerId);
-      onUnitSelect?.(unit);
-      setIsUnitDragging(true);
+      if (unit) {
+        unitDragRef.current = { pointerId: event.pointerId, unit };
+        viewport.setPointerCapture(event.pointerId);
+        onUnitSelect?.(unit);
+        setIsDragging(true);
+        return;
+      }
+      const decoration = decorationAt(cell.x, cell.y);
+      if (decoration) {
+        decorationDragRef.current = { pointerId: event.pointerId, decoration };
+        viewport.setPointerCapture(event.pointerId);
+        onDecorationSelect?.(decoration);
+        setIsDragging(true);
+      }
       return;
     }
     if (event.button !== 0) return;
@@ -247,6 +297,8 @@ export function MapPreviewCanvas({ mission, art, onCellClick, selectedDecoration
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const unitDrag = unitDragRef.current;
     if (unitDrag?.pointerId === event.pointerId) return;
+    const decorationDrag = decorationDragRef.current;
+    if (decorationDrag?.pointerId === event.pointerId) return;
     const viewport = viewportRef.current;
     const drag = dragRef.current;
     if (!viewport || !drag || drag.pointerId !== event.pointerId) return;
@@ -284,7 +336,23 @@ export function MapPreviewCanvas({ mission, art, onCellClick, selectedDecoration
       }
       if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
       unitDragRef.current = null;
-      setIsUnitDragging(false);
+      setIsDragging(false);
+      return;
+    }
+    const decorationDrag = decorationDragRef.current;
+    if (decorationDrag?.pointerId === event.pointerId) {
+      if (!cancelled) {
+        const canvas = canvasRef.current;
+        const engine = engineRef.current;
+        if (canvas && engine) {
+          const rect = canvas.getBoundingClientRect();
+          const cell = engine.cellAt(event.clientX - rect.left, event.clientY - rect.top);
+          if (cell) onDecorationPlace?.(decorationDrag.decoration, cell.x, cell.y);
+        }
+      }
+      if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      decorationDragRef.current = null;
+      setIsDragging(false);
       return;
     }
     const drag = dragRef.current;
@@ -354,7 +422,7 @@ export function MapPreviewCanvas({ mission, art, onCellClick, selectedDecoration
       </div>
       <div
         ref={viewportRef}
-        className={`h-full w-full bg-black ember-scrollbar overflow-x-auto overflow-y-scroll ${isUnitDragging || isPanning ? "cursor-grabbing" : "cursor-default"}`}
+        className={`h-full w-full bg-black ember-scrollbar overflow-x-auto overflow-y-scroll ${isDragging || isPanning ? "cursor-grabbing" : "cursor-default"}`}
         style={{ scrollbarGutter: "stable both-edges" }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

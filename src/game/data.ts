@@ -57,11 +57,7 @@ export const TERRAIN: Record<TerrainId, TerrainDef> = {
   column: { id: "column", name: "Coluna", moveCost: 99, def: 0, atk: 0, passable: false, blocksShot: true },
   nave: { id: "nave", name: "Laje", moveCost: 1, def: 0, atk: 0, passable: true },
   barricade: { id: "barricade", name: "Barricada", moveCost: 99, def: 0, atk: 0, passable: false, blocksShot: true },
-  highwood: { id: "highwood", name: "Tronco morto", moveCost: 2, def: 1, atk: 2, passable: true, height: 1 },
-  highruin: { id: "highruin", name: "Casa abandonada", moveCost: 2, def: 1, atk: 2, passable: true, height: 1 },
-  chest: { id: "chest", name: "Baú trancado", moveCost: 99, def: 0, atk: 0, passable: false },
   door: { id: "door", name: "Porta trancada", moveCost: 99, def: 0, atk: 0, passable: false, blocksShot: true },
-  deadtree: { id: "deadtree", name: "Tronco caído", moveCost: 2, def: 1, atk: 2, passable: true, height: 1 },
   snow: { id: "snow", name: "Neve", moveCost: 1, def: 0, atk: 0, passable: true },
   /** Pure void — a building block for closed/indoor maps: apaga o terreno e nem se atravessa, nem se vê através. */
   void: { id: "void", name: "Vazio", moveCost: 99, def: 0, atk: 0, passable: false, blocksShot: true },
@@ -112,6 +108,34 @@ export const FOOTPRINT_TYPE_7 = [
   { dx: 1, dy: -1 },
   { dx: 0, dy: -2 },
   { dx: 1, dy: -2 },
+];
+
+/** Tipo 5 — a 3-hex front row (dy:0, closest to the player — where its melee/attack range
+ * actually originates) plus a 2-hex row behind it (dy:-1), the back row shifted one dx left
+ * of Type 7/8's own dy:-1 row (dx 0,1) so it sits centered over the 3-wide front row instead
+ * of skewed to its right. Superseded by FOOTPRINT_TYPE_6 for Familiar Titã (see below); kept
+ * standalone rather than folded into it in case a future creature wants the narrower back
+ * row on purpose. */
+export const FOOTPRINT_TYPE_5 = [
+  { dx: -1, dy: 0 },
+  { dx: 0, dy: 0 },
+  { dx: 1, dy: 0 },
+  { dx: -1, dy: -1 },
+  { dx: 0, dy: -1 },
+];
+
+/** Tipo 6 — Familiar Titã ("the Big Guy"): FOOTPRINT_TYPE_5 with a third back-row hex added
+ * at dx:1 (per direct instruction — the back row was reading as too narrow, a full 3-wide row
+ * to match the front instead of the 2-wide one Type 5 has), making it a true 3-wide/2-tall
+ * rectangle: 3-hex front row (dy:0, closest to the player) plus a matching 3-hex row behind
+ * it (dy:-1). */
+export const FOOTPRINT_TYPE_6 = [
+  { dx: -1, dy: 0 },
+  { dx: 0, dy: 0 },
+  { dx: 1, dy: 0 },
+  { dx: -1, dy: -1 },
+  { dx: 0, dy: -1 },
+  { dx: 1, dy: -1 },
 ];
 
 const DECO_PAIR = [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }];
@@ -320,7 +344,15 @@ export const DEADWOODS_DECOR_IDS = new Set([
 export const DECORATIONS: Record<string, DecorationDef> = {
   "mountain-ridge": { id: "mountain-ridge", name: "Cordilheira", footprint: DECO_PAIR, tile: "hill" },
   "spike-rocks": { id: "spike-rocks", name: "Agulhas de Pedra", footprint: DECO_PAIR, tile: "column" },
-  "dead-tree-large": { id: "dead-tree-large", name: "Árvore Morta Grande", footprint: DECO_PAIR, tile: "highwood" },
+  // No tile stamp (unlike mountain-ridge/spike-rocks/dense-forest/broken-cliff-wall/
+  // boulder-cluster above) — it used to stamp "highwood" underneath itself, which is exactly
+  // the terrain deadtree/highwood/highruin were retired for being (see
+  // clearScrappedGroundTiles' own doc comment): a fallen-tree PROP re-creating a fallen-tree
+  // GROUND TILE the instant it's placed, including by scatterDecor's random scatter (which
+  // draws from every decoration in this whole record) — so "Gerar terreno" kept bringing
+  // highwood back even after scatterTactics stopped generating it directly. Purely
+  // decorative now, same as wilds-fallen-log/wilds-dead-oak.
+  "dead-tree-large": { id: "dead-tree-large", name: "Árvore Morta Grande", footprint: DECO_PAIR },
   "dense-forest": { id: "dense-forest", name: "Bosque Denso", footprint: DECO_PAIR, tile: "woods" },
   "broken-cliff-wall": { id: "broken-cliff-wall", name: "Muralha Rochosa Partida", footprint: DECO_PAIR, tile: "column", repeatGroup: "broken-cliff-wall" },
   "boulder-cluster": { id: "boulder-cluster", name: "Amontoado de Pedras", footprint: DECO_TRIO, tile: "column" },
@@ -339,9 +371,18 @@ export const DECORATIONS: Record<string, DecorationDef> = {
   gatehouse: { id: "gatehouse", name: "Portão Fortificado", footprint: DECO_PAIR },
   watchtower: { id: "watchtower", name: "Torre de Vigia", footprint: DECO_PAIR },
   "ancient-shrine": { id: "ancient-shrine", name: "Santuário Antigo", footprint: DECO_PAIR },
-  "locked-chest": { id: "locked-chest", name: "Baú Pequeno", footprint: DECO_ONE, tile: "chest" },
-  "chest-medium": { id: "chest-medium", name: "Baú Médio", footprint: DECO_ONE, tile: "chest" },
-  "chest-large": { id: "chest-large", name: "Baú Grande", footprint: DECO_ONE, tile: "chest" },
+  // No `tile` — a chest is translucent scenery sitting on whatever ground was already
+  // there (grass, ruins, a hill), never a terrain of its own. Its lock/block behavior
+  // comes from CHEST_DECOR_IDS + hexprops.buildDecorOverlay instead of stamping the hex,
+  // so opening or removing one can never leave the wrong floor art behind (see the old
+  // "chest" TerrainId/visualFloorAt guess this replaced).
+  // Small/medium/large still roll different loot tiers under the hood (see CHEST_LOOT /
+  // useLockpick's tier check on the decoration id). This `name` is the Map Editor's own
+  // picker/placement label only (GameApp.tsx) — kept distinct so an author can tell them
+  // apart when placing one — never shown to the player in battle, who reads the icon.
+  "locked-chest": { id: "locked-chest", name: "Baú Pequeno", footprint: DECO_ONE },
+  "chest-medium": { id: "chest-medium", name: "Baú Médio", footprint: DECO_ONE },
+  "chest-large": { id: "chest-large", name: "Baú Grande", footprint: DECO_ONE },
   // A prop, not a hex type: it lays "barricade" terrain under itself and every barricade
   // rule rides on that tile — impassable except to a troll (at cost 2, which also smashes
   // it), blocks shots, and lets whoever stands right behind it shoot over while staying
@@ -378,9 +419,9 @@ export const DECORATIONS: Record<string, DecorationDef> = {
   ...NEW_DECOR_2026,
 };
 
-/** Every lockable-chest decoration id. Both size variants stamp "chest" terrain and open the
- * same way (BattleEngine.useLockpick/adjacentLock) — callers that need "is this a chest"
- * check membership here instead of one hardcoded id. */
+/** Every lockable-chest decoration id. Both size variants block/open the same way
+ * (BattleEngine.useLockpick/adjacentLock, hexprops.buildDecorOverlay) — callers that need
+ * "is this a chest" check membership here instead of one hardcoded id. */
 export const CHEST_DECOR_IDS = new Set(["locked-chest", "chest-medium", "chest-large"]);
 
 /** Small single-building house props — a 3-hex footprint (DECO_TRIO), drawn at the shared
@@ -587,7 +628,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mov: 5,
     minRange: 1,
     maxRange: 1,
-    sprite: "kael",
+    sprite: "defaultWarrior",
     size: 1,
     init: 7,
   },
@@ -730,7 +771,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   // Stats are a first pass — placeholder numbers to get it on the board, to be balanced later.
   morvenianWolf: {
     id: "morvenianWolf",
-    name: "Lobo Morveniano",
+    name: "Mordavian Puppy",
     role: "Fera",
     hp: 34,
     atk: 10,
@@ -741,6 +782,24 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     minRange: 1,
     maxRange: 1,
     sprite: "morvenian-wolf",
+    size: 2,
+    footprintOffsets: FOOTPRINT_TYPE_2,
+    init: 7,
+  },
+  // Stats are a first pass — placeholder numbers to get it on the board, to be balanced later.
+  mordavianWolf: {
+    id: "mordavianWolf",
+    name: "Mordavian Wolf",
+    role: "Fera",
+    hp: 44,
+    atk: 13,
+    mag: 0,
+    def: 3,
+    res: 2,
+    mov: 6,
+    minRange: 1,
+    maxRange: 1,
+    sprite: "mordavian-wolf",
     size: 2,
     footprintOffsets: FOOTPRINT_TYPE_2,
     init: 7,
@@ -791,7 +850,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mag: 0,
     def: 4,
     res: 4,
-    mov: 3,
+    mov: 5,
     minRange: 1,
     maxRange: 1,
     sprite: "birolho",
@@ -811,7 +870,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mag: 0,
     def: 4,
     res: 4,
-    mov: 3,
+    mov: 5,
     minRange: 1,
     maxRange: 1,
     sprite: "birolho2",
@@ -828,7 +887,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mag: 0,
     def: 4,
     res: 4,
-    mov: 3,
+    mov: 5,
     minRange: 1,
     maxRange: 1,
     sprite: "birolho3",
@@ -880,7 +939,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mag: 0,
     def: 5,
     res: 5,
-    mov: 3,
+    mov: 5,
     minRange: 1,
     maxRange: 1,
     sprite: "horror",
@@ -897,7 +956,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mag: 0,
     def: 6,
     res: 4,
-    mov: 2,
+    mov: 5,
     minRange: 1,
     maxRange: 1,
     sprite: "Asherah",
@@ -913,10 +972,14 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   // threat, and the growth table below scales the same way (res is the one that cannot —
   // 40% of 1 does not exist on an integer grid, so it stays 1).
   //
-  // Two things sit outside that multiplier. It reaches two hexes where the troll reaches
+  // One thing sits outside that multiplier: it reaches two hexes where the troll reaches
   // one, because its charge-up animation belongs to a beam the reference video could not be
-  // cut from (see the sprite folder's README) — so the reach stands in for it. And it moves
-  // 2 like the troll: speed is not what "stronger" was asked to mean.
+  // cut from (see the sprite folder's README) — so the reach stands in for it. Movement
+  // (mov) is no longer part of what set this creature apart, either — every large-footprint
+  // class (Birolho/Birolho2/Birolho3, Horror, Asherah, this, the Troll below) now moves the
+  // same 5 every other unit does, per direct instruction: a big creature's own multi-hex
+  // footprint already makes it easier to hit (see footprint()'s use for targeting/occupancy,
+  // untouched) — that's the entire point of it being large, not also being slow.
   ancientGolem: {
     id: "ancientGolem",
     name: "Golem Ancião",
@@ -926,7 +989,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mag: 0,
     def: 13,
     res: 4,
-    mov: 2,
+    mov: 5,
     minRange: 1,
     maxRange: 2,
     sprite: "ancient-golem",
@@ -943,7 +1006,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     mag: 0,
     def: 9,
     res: 3,
-    mov: 2,
+    mov: 5,
     minRange: 1,
     maxRange: 1,
     sprite: "troll",
@@ -1197,6 +1260,36 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     init: 6,
     summon: true,
   },
+  // Conjurer tier 3 (Summon Familiar Titã, "the Big Guy") — see castSummonFamiliar. Every
+  // combat stat here is a fallback only, same as familiar/familiar2 above: the real numbers
+  // are 100% of the conjurer's own current attributes (SUMMON_FAMILIAR3.statScale), computed
+  // live at cast time. Also the only familiar tier that can cast a spell of its own — see
+  // Unit.spellCharges/familiarSpellCharges.
+  familiar3: {
+    id: "familiar3",
+    name: "Familiar Titã",
+    role: "Invocação",
+    hp: 22,
+    atk: 8,
+    mag: 8,
+    def: 4,
+    res: 4,
+    mov: 5,
+    minRange: 1,
+    maxRange: 1,
+    sprite: "familiar3",
+    // Wolf-sized visually (size:2 — same render-scale bucket as morvenianWolf, plus its own
+    // dedicated +40% in engine.ts's familiar3Scale), but a real 6-hex attack-zone footprint
+    // (see FOOTPRINT_TYPE_6) instead of size:2's generic anchor+1-neighbor fallback —
+    // footprintOffsets is honored regardless of the size number (see footprint() in
+    // pathfinding.ts), so the two are independent. The explicit shape is what
+    // footprintCost/computeReachable key off, the same path already fixed for
+    // Troll/Birolho/Horror/Asherah/Ancient Golem getting stuck on their own footprint.
+    size: 2,
+    footprintOffsets: FOOTPRINT_TYPE_6,
+    init: 6,
+    summon: true,
+  },
   paladin: {
     id: "paladin",
     name: "Paladino",
@@ -1404,6 +1497,7 @@ export const GROWTH: Record<ClassId, { hp: number; atk: number; mag: number; def
   captain: { hp: 4, atk: 2, mag: 0, def: 2, res: 1 },
   wardog: { hp: 4, atk: 2, mag: 0, def: 2, res: 1 },
   morvenianWolf: { hp: 4, atk: 2, mag: 0, def: 2, res: 1 },
+  mordavianWolf: { hp: 4, atk: 2, mag: 0, def: 2, res: 1 },
   punisher: { hp: 4, atk: 2, mag: 0, def: 2, res: 1 },
   // Boss-tier growth (matches sandoval below) — high stats scale up like an elite's, not
   // a rank-and-file enemy's, if he's ever spawned at a later mission index.
@@ -1438,6 +1532,7 @@ export const GROWTH: Record<ClassId, { hp: number; atk: number; mag: number; def
   // every ClassId.
   familiar: { hp: 0, atk: 0, mag: 0, def: 0, res: 0 },
   familiar2: { hp: 0, atk: 0, mag: 0, def: 0, res: 0 },
+  familiar3: { hp: 0, atk: 0, mag: 0, def: 0, res: 0 },
   paladin: { hp: 5, atk: 1, mag: 1, def: 3, res: 2 },
   heavyKnight: { hp: 5, atk: 1, mag: 0, def: 3, res: 1 },
   // Provisório — copiado da classe base (ver nota em CLASSES acima).
@@ -2529,6 +2624,7 @@ export const EMBER_DROP: Partial<Record<ClassId, number>> = {
   pikeman: 3,
   wardog: 2,
   morvenianWolf: 3,
+  mordavianWolf: 5,
   punisher: 5,
   // Matches CLASSES.theButcher's stat boost — a tougher kill is worth more.
   theButcher: 9,
@@ -2957,6 +3053,35 @@ export const SUMMON_FAMILIAR = {
   statScale: 0.5,
 };
 
+/** Conjurer tier 1's second spell (shares tier 1's pool of uses with Invocar Familiar, same
+ * "more than one spell at the same tier" deal as summonFamiliar2/webOfDreams at tier 2 — see
+ * FAMILIAR_SPELL's doc above and tierRemaining/spendTier in engine.ts) — a long-range single
+ * hit from a summoned spirit that strikes once and vanishes, never a lingering ally like the
+ * familiar summons. Unlocked at PHANTASMAL_FORCE_UNLOCK_LEVEL rather than from level 1 like
+ * Invocar Familiar, even though they share a tier — tierUses alone can't express a
+ * per-spell gate within a shared tier, so startPhantasmalForce checks the caster's level
+ * directly (see engine.ts). */
+export const PHANTASMAL_FORCE = {
+  name: "Força Fantasmal",
+  range: 6,
+};
+
+export const PHANTASMAL_FORCE_UNLOCK_LEVEL = 2;
+
+/** Phantasmal Force's damage dice — no flat power multiplier (spellDamage's mul stays at 1,
+ * same reasoning as Dreno de Vida's own lifeDrainDice above), just MAG plus a die that
+ * climbs one weapon-style size every 2 levels (1D4 at 1-2, 1D6 at 3-4, 1D8 at 5-6, ...) — 1D4
+ * at unlock (level 2), since the level gate and the dice curve are two independent things
+ * that just happen to share this spell; don't re-derive one from the other. */
+export function phantasmalForceDice(level: number): { dice: number; faces: number } {
+  return { dice: 1, faces: 4 + Math.floor((Math.max(1, level) - 1) / 2) * 2 };
+}
+
+export function phantasmalForceFormula(level: number, mag: number): string {
+  const p = phantasmalForceDice(level);
+  return spellFormula(mag, 1, p.dice, p.faces, 0);
+}
+
 /** Conjurer tier 2: a second, stronger summon — its own spell/slot/tier-2 charge, not an
  * upgrade of Invocar Familiar. The first case of a class having more than one spell choice
  * at the same tier, sharing that tier's pool of uses (see castSummonFamiliar's `evolved`
@@ -2966,6 +3091,105 @@ export const SUMMON_FAMILIAR2 = {
   range: 7,
   statScale: 0.75,
 };
+
+/** Extra per-spell gate on top of tier 2's own shared-pool unlock (tier 2 first grants uses
+ * at level 3 under FULL_TABLE, same level Web of Dreams becomes castable) — same
+ * "tierUses alone can't express a per-spell gate within a shared tier" reasoning as
+ * PHANTASMAL_FORCE_UNLOCK_LEVEL, so startSummonFamiliar2 checks the caster's level directly
+ * (see engine.ts) instead of relying on the tier table alone. */
+export const SUMMON_FAMILIAR2_UNLOCK_LEVEL = 5;
+
+/** Conjurer tier 3: "the Big Guy" — same summon shape as tiers 1-2, its own spell/slot, but
+ * at 100% of the conjurer's current attributes (not a fraction) and its own Fireball once
+ * summoned — see familiarSpellCharges. */
+export const SUMMON_FAMILIAR3 = {
+  name: "Invocar Familiar Titã",
+  range: 7,
+  statScale: 1,
+};
+
+/** Which of the conjurer's three familiar tiers gets a spell of its own, and which one —
+ * Familiar and Familiar Maior (tiers 1-2) both get Magic Missile, Familiar Titã (tier 3) gets
+ * Bola de Fogo instead. Every other tier/class is absent, meaning "no familiar spell of its
+ * own" (see familiarSpellRemaining in engine.ts). Familiar Maior is the one tier with a SECOND
+ * own spell on top of this, Dreno de Vida (see LIFE_DRAIN/familiarLifeDrainCharges below) —
+ * it isn't listed here because it runs through its own dedicated Unit.lifeDrainCharges field
+ * and castLifeDrain, not the generic spellCharges machinery this table drives. */
+export const FAMILIAR_SPELL: Partial<Record<ClassId, SpellKind>> = {
+  familiar: "magicMissile",
+  familiar2: "magicMissile",
+  familiar3: "fireball",
+};
+
+/** Familiar Titã's own Fireball charges for the battle — set once at summon time from the
+ * conjurer's level (the familiar's own `level` is copied from its summoner in
+ * castSummonFamiliar, so passing either one in works out the same). Once per combat at
+ * unlock, then +1 at each of these levels — validated by hand like every other level×count
+ * breakpoint table in this file, not a formula. */
+export function familiarSpellCharges(level: number): number {
+  if (level >= 28) return 4;
+  if (level >= 21) return 3;
+  if (level >= 16) return 2;
+  return 1;
+}
+
+/** Familiar and Familiar Maior's own Magic Missile charges for the battle — same idea as
+ * familiarSpellCharges above (set once at summon time from the conjurer's level), but its own
+ * curve: it starts a level earlier and climbs on a tighter breakpoint schedule, topping out
+ * one charge higher, so the weaker two familiar tiers still feel like they're gaining
+ * something across a full playthrough even without Familiar Titã's raw power. */
+export function familiarMagicMissileCharges(level: number): number {
+  if (level >= 20) return 5;
+  if (level >= 16) return 4;
+  if (level >= 11) return 3;
+  if (level >= 5) return 2;
+  return 1;
+}
+
+/** Familiar Maior's own second spell, Dreno de Vida — a magical melee touch (MAG vs RES,
+ * same as every other caster's attack — see powerOf/protOf in combat.ts) that also heals its
+ * summoning conjurer for a share of the damage it deals (see the lifeDrain branch in
+ * BattleEngine.stepSpell). Melee range, matching the familiar's own minRange/maxRange. */
+export const LIFE_DRAIN = {
+  name: "Dreno de Vida",
+  range: 1,
+};
+
+/** Dreno de Vida's own damage dice — no flat power multiplier (spellDamage's mul stays at
+ * 1, unlike Fireball/Lightning's own), just MAG plus a die that climbs one weapon-style size
+ * every 3 levels (1D4 at 1-3, 1D6 at 4-6, 1D8 at 7-9, ...), the same shape a real weapon
+ * upgrade path uses rather than a hand-picked breakpoint table. */
+export function lifeDrainDice(level: number): { dice: number; faces: number } {
+  return { dice: 1, faces: 4 + Math.floor((Math.max(1, level) - 1) / 3) * 2 };
+}
+
+export function lifeDrainFormula(level: number, mag: number): string {
+  const p = lifeDrainDice(level);
+  return spellFormula(mag, 1, p.dice, p.faces, 0);
+}
+
+/** Familiar Maior's own Dreno de Vida charges for the battle — set once at summon time
+ * from the conjurer's level, same idea as familiarSpellCharges/familiarMagicMissileCharges
+ * (its own hand-validated breakpoint table, not a formula), but its own schedule since it's a
+ * second, independent spell/charge pool on top of that tier's Magic Missile. */
+export function familiarLifeDrainCharges(level: number): number {
+  if (level >= 30) return 5;
+  if (level >= 23) return 4;
+  if (level >= 17) return 3;
+  if (level >= 10) return 2;
+  return 1;
+}
+
+/** What fraction of Dreno de Vida's dealt damage heals the familiar's summoning conjurer —
+ * climbs in lockstep with familiarLifeDrainCharges' own breakpoints (same level thresholds),
+ * hand-validated the same way. */
+export function lifeDrainHealMul(level: number): number {
+  if (level >= 30) return 1;
+  if (level >= 23) return 0.75;
+  if (level >= 17) return 0.6;
+  if (level >= 10) return 0.4;
+  return 0.25;
+}
 
 /** Conjurer tier 2: drops a sticky patch of webbing centered on the target cell. Every unit
  * (either side) standing in it at cast time rolls sleepChance to fall asleep for 1D4 of its
@@ -2989,6 +3213,19 @@ export function webOfDreamsSize(level: number): number {
   if (level >= 12) return WEB_OF_DREAMS.size + 2;
   if (level >= 7) return WEB_OF_DREAMS.size + 1;
   return WEB_OF_DREAMS.size;
+}
+
+/** Web of Dreams' sleep chance scales with the caster's level instead of staying flat at the
+ * base WEB_OF_DREAMS.sleepChance (25%) forever: linear from that base at level 3 (when
+ * Conjurer first unlocks the tier-2 spell — see FULL_TABLE/tierUses) up to 85% at level 30.
+ * Baked into the zone at cast time (see castWebOfDreams), not re-read live, so a zone always
+ * rolls at the level that actually created it. */
+export function webOfDreamsSleepChance(level: number): number {
+  const unlockLevel = 3;
+  const maxLevel = 30;
+  const maxChance = 0.85;
+  const t = Math.max(0, Math.min(1, (level - unlockLevel) / (maxLevel - unlockLevel)));
+  return WEB_OF_DREAMS.sleepChance + (maxChance - WEB_OF_DREAMS.sleepChance) * t;
 }
 
 export const LIGHTNING = {
@@ -3348,7 +3585,9 @@ export const SPELL_TIER: Partial<Record<SpellKind, SpellTier>> = {
   sweep: 2,
   trip: 3,
   summonFamiliar: 1,
+  phantasmalForce: 1,
   summonFamiliar2: 2,
+  summonFamiliar3: 3,
   webOfDreams: 2,
   fireball: 3,
   lightningTier3: 5,
@@ -3457,11 +3696,7 @@ const CHAR: Record<string, TerrainId> = {
   c: "column",
   n: "nave",
   b: "barricade",
-  d: "highwood",
-  s: "highruin",
-  k: "chest",
   o: "door",
-  t: "deadtree",
   v: "void",
   u: "snow",
 };
@@ -3487,11 +3722,7 @@ export const TILE_CHAR: Record<TerrainId, string> = {
   column: "c",
   nave: "n",
   barricade: "b",
-  highwood: "d",
-  highruin: "s",
-  chest: "k",
   door: "o",
-  deadtree: "t",
   void: "v",
   snow: "u",
 };
@@ -3514,7 +3745,6 @@ export function terrainNote(id: TerrainId): string | undefined {
   const t = TERRAIN[id];
   if (t.height) return `${t.name} · +10% ataque · arqueira +1 alcance`;
   if (t.id === "barricade") return "não se atravessa · 3 hexes · de trás você atira · quem está atrás não é acertado";
-  if (t.id === "chest") return "trancado · precisa de Gazua para abrir · pode conter Gold";
   if (t.id === "door") return "trancada · precisa de Gazua para abrir";
   if (t.id === "void") return "vazio · não se atravessa, não se vê através · apaga o terreno pra fechar áreas indoor";
   if (t.hazardDice) return `${t.name} · atravessável · custa ${t.moveCost} Mov · dano ${t.hazardDice}D${t.hazardFaces ?? 8} ao entrar e no início de cada turno`;
@@ -4178,9 +4408,10 @@ export function scatterTactics(m: Mission): Mission {
   // to roughly 224-352 cells. Run unscaled on a smaller board they crowd it — a raw 10x8
   // got the same two walls in a quarter of the space — so they follow the area instead.
   const density = (m.cols * m.rows) / 288;
-  // Two on a campaign-sized board, and capped there: barricades are the most intrusive
-  // thing the scatter places, so the count is allowed to start at two and then stop
-  // climbing rather than growing with every extra hex of map.
+  // Two to three on a campaign-sized board — back to the original count (1-2 read as too
+  // sparse per direct follow-up report). Decoration variety is still the bigger lean now
+  // (see scatterDecor's own want below, which stayed bumped up), just not at the cost of
+  // barricades reading as scarce.
   const wantWalls = Math.min(3, Math.max(1, Math.round(2 * density)));
   // Picking straight off the static score sort put every wall in practically the same spot:
   // the score is dominated by "between the spawns and horizontally centered," so the 2nd and
@@ -4230,7 +4461,7 @@ export function scatterTactics(m: Mission): Mission {
     for (const p of cand) {
       if (got >= n) break;
       const i = p.y * m.cols + p.x;
-      if (tiles[i] === "hill" || tiles[i] === "highwood" || tiles[i] === "highruin" || tiles[i] === "deadtree" || tiles[i] === "barricade") continue;
+      if (tiles[i] === "hill" || tiles[i] === "barricade") continue;
       if (taken.some((q) => oddrDist(p.x, p.y, q.x, q.y) < 3)) continue;
       tiles[i] = kind;
       taken.push(p);
@@ -4239,16 +4470,12 @@ export function scatterTactics(m: Mission): Mission {
   };
   // Uncapped: high ground should keep coming as the board grows. Only the barricades
   // above are held back — everything else is meant to be plentiful.
-  pick(Math.max(1, Math.round(4 * density)), "hill");
-  const highKinds: TerrainId[] = ["hill", "highwood", "highruin", "deadtree"];
-  for (let y = 0; y < m.rows; y++) {
-    for (let x = 0; x < m.cols; x++) {
-      const i = y * m.cols + x;
-      if (tiles[i] !== "hill") continue;
-      const v = (x * 17 + y * 31 + m.index * 9) % highKinds.length;
-      tiles[i] = highKinds[v] ?? "hill";
-    }
-  }
+  // Used to diversify a fraction of these into highwood/highruin/deadtree — per direct
+  // instruction, those three are retired as ground-tile terrain entirely (a fallen tree
+  // trunk or an abandoned house is a prop sitting on ground, not a kind of ground) and
+  // replaced everywhere by a decoration on plain ground instead (see
+  // clearScrappedGroundTiles below, which does that for every existing mission). Every
+  // elevated tile this generator produces is plain "hill" now, nothing else.
   const layout: string[] = [];
   for (let y = 0; y < m.rows; y++) {
     let row = "";
@@ -4300,6 +4527,60 @@ function rockifyColumns(mission: Mission): Mission {
   for (let y = 0; y < mission.rows; y++) {
     for (let x = 0; x < mission.cols; x++) {
       if (grid[y]![x] === "c" && !claimed.has(`${x},${y}`)) grid[y]![x] = fallbackFloor;
+    }
+  }
+  return { ...mission, layout: grid.map((row) => row.join("")), decorations };
+}
+
+// deadtree/highwood/highruin's replacement decorations, one pool per retired tile — each
+// picked specifically for having NO `tile` property of its own (see DECORATIONS.dead-tree-
+// large.tile — a decoration WITH one re-stamps that same terrain under itself the instant
+// it's placed, engine.ts's own decoration-placement code applies it live, which would just
+// silently recreate the exact ground tile this whole pass exists to get rid of). Single-hex
+// on purpose too: deadtree/highwood/highruin were common enough (dozens per mission on some
+// boards) that adjacent runs of them are the normal case, and a single-hex prop never needs
+// the neighbor-overlap bookkeeping a multi-hex one would.
+const DEADTREE_REPLACEMENT = "wilds-fallen-log";
+const HIGHWOOD_REPLACEMENT = "wilds-dead-oak";
+const HIGHRUIN_REPLACEMENT = "wilds-ruined-wayside-shrine";
+
+/** Retires deadtree/highwood/highruin as ground-tile terrain, per direct instruction: those
+ * three were never really "ground" — a fallen tree trunk (deadtree/highwood, distinguished
+ * only by which sprite folder inherited the name — see TERRAIN's own "Tronco caído"/"Tronco
+ * morto") and an abandoned house (highruin) are props that happen to sit on the ground, not
+ * a kind of ground themselves — so every occurrence becomes plain floor (matching
+ * rockifyColumns' own fallbackFloor convention: "n" on an indoor/underground map, "."
+ * everywhere else) with a same-theme decoration placed on top instead. Runs in the same
+ * post-expandMaps pipeline slot as rockifyColumns for the same reason: coordinates only
+ * line up with the final rendered grid after expandMaps has already doubled every raw
+ * hand-authored cell. */
+function clearScrappedGroundTiles(mission: Mission): Mission {
+  if (mission.hub) return mission;
+  const grid = mission.layout.map((row) => row.split(""));
+  // "h" (hill), not the plain floor fallback — deadtree/highwood/highruin were always
+  // mechanically identical to hill (moveCost 2, def 1, atk 2, height 1, every one of them —
+  // see TERRAIN's own now-removed entries), just three redundant visual reskins of the same
+  // elevated terrain. Per direct instruction, a "high ground tile" becomes hill (keeping the
+  // actual elevation gameplay) with a "high ground decoration" on top for the visual variety
+  // those three used to carry, not flattened away to plains.
+  const fallbackFloor = "h";
+  const decorations: DecorationPlacement[] = [...(mission.decorations ?? [])];
+  const claimed = decorationCells(decorations);
+  const targets: { char: string; id: string }[] = [
+    { char: "t", id: DEADTREE_REPLACEMENT },
+    { char: "d", id: HIGHWOOD_REPLACEMENT },
+    { char: "s", id: HIGHRUIN_REPLACEMENT },
+  ];
+  for (const { char, id } of targets) {
+    for (let y = 0; y < mission.rows; y++) {
+      for (let x = 0; x < mission.cols; x++) {
+        if (grid[y]![x] !== char) continue;
+        grid[y]![x] = fallbackFloor;
+        const key = `${x},${y}`;
+        if (claimed.has(key)) continue;
+        decorations.push({ id, x, y });
+        claimed.add(key);
+      }
     }
   }
   return { ...mission, layout: grid.map((row) => row.join("")), decorations };
@@ -4417,7 +4698,7 @@ function placeChests(
   blockedExtra: Set<string>,
   seed: number,
   floorChar: string,
-): void {
+): Cell[] {
   const rng = mulberry32Local(seed);
   const spawns = [...playerSpawns, ...enemySpawns];
   const candidates: Cell[] = [];
@@ -4460,11 +4741,14 @@ function placeChests(
     const candidate = new Set(blockedExtra);
     candidate.add(`${cx},${cy}`);
     if (connectivityOk(grid, cols, rows, candidate, spawns)) {
-      grid[cy]![cx] = "k";
+      // Leave the hex painted as whatever floorChar it already was (grass/nave) — the
+      // chest is a decoration laid on top, not a terrain of its own (see
+      // DECORATIONS.locked-chest's own comment on why it carries no `tile`).
       blockedExtra.add(`${cx},${cy}`);
       placed.push([cx, cy]);
     }
   }
+  return placed;
 }
 
 /** Strips "funky" single-hex clutter tiles — woods ("w") and ruins ("r"), whose baked-in
@@ -4485,16 +4769,14 @@ function decorateOpenTerrain(mission: Mission): Mission {
   const spawnSet = new Set([...playerSpawns, ...enemySpawns].map(([x, y]) => `${x},${y}`));
   const floorChar = mission.layout.some((row) => row.includes("n")) ? "n" : ".";
   const blockedExtra = new Set<string>();
-  // Hand-placed locked-chest props count as authored loot boxes too — they stamp "chest"
-  // terrain (see DECORATIONS.locked-chest.tile), same as a layout "k". Skip the random
+  // Hand-placed locked-chest props count as authored loot boxes too. Skip the random
   // sprinkle so a mapper's own chests are the ones that stay.
-  const hasAuthoredChest =
-    mission.layout.some((row) => row.includes("k")) ||
-    (mission.decorations ?? []).some((d) => CHEST_DECOR_IDS.has(d.id));
-  if (!hasAuthoredChest) {
-    placeChests(grid, cols, rows, playerSpawns, enemySpawns, spawnSet, blockedExtra, seedFromId(mission.id), floorChar);
-  }
+  const hasAuthoredChest = (mission.decorations ?? []).some((d) => CHEST_DECOR_IDS.has(d.id));
   const decorations: DecorationPlacement[] = [...(mission.decorations ?? [])];
+  if (!hasAuthoredChest) {
+    const placedChests = placeChests(grid, cols, rows, playerSpawns, enemySpawns, spawnSet, blockedExtra, seedFromId(mission.id), floorChar);
+    for (const [x, y] of placedChests) decorations.push({ id: "locked-chest", x, y });
+  }
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       if (grid[y]![x] !== "k") continue;
@@ -4569,8 +4851,10 @@ export function scatterDecor(m: Mission, excludeIds?: ReadonlySet<string>): Miss
   // pulling it out of DECORATIONS entirely and losing manual placement too.
   const ids = Object.keys(DECORATIONS).filter((id) => !CHEST_DECOR_IDS.has(id) && !MANUAL_DECORATION_IDS.has(id) && !excludeIds?.has(id));
   // Uncapped and generous: scenery is the thing a board should have lots of, and anything
-  // unwanted is a click to clear.
-  const want = Math.max(3, Math.round(((m.cols * m.rows) / 288) * 10));
+  // unwanted is a click to clear. Bumped from 10 to 14 per campaign-sized board alongside
+  // wallCenters' own reduction above — the generator now leans toward decoration variety
+  // rather than barricades for its "intrusive" scatter.
+  const want = Math.max(4, Math.round(((m.cols * m.rows) / 288) * 14));
   const placed: DecorationPlacement[] = [...(m.decorations ?? [])];
   if (ids.length === 0) return { ...m, decorations: placed };
 
@@ -4598,10 +4882,15 @@ export function scatterDecor(m: Mission, excludeIds?: ReadonlySet<string>): Miss
  * decoration. The Map Editor's "Gerar terreno" calls this so the board it fills matches
  * what a real mission would look like, rather than only the first of the three. */
 export function dressMap(m: Mission, excludeIds?: ReadonlySet<string>): Mission {
-  return scatterDecor(decorateOpenTerrain(rockifyColumns(scatterTactics(m))), excludeIds);
+  // clearScrappedGroundTiles last: scatterTactics no longer generates deadtree/highwood/
+  // highruin and dead-tree-large no longer re-stamps highwood, so this shouldn't have
+  // anything left to do on a fresh "Gerar terreno" — kept as a safety net, and run after
+  // scatterDecor specifically so it sees every decoration already placed (rocks, chests,
+  // the random scatter) before deciding where its own replacements safely fit.
+  return clearScrappedGroundTiles(scatterDecor(decorateOpenTerrain(rockifyColumns(scatterTactics(m))), excludeIds));
 }
 
-export const MISSIONS: Mission[] = expandMaps(RAW_MISSIONS).map(rockifyColumns).map(decorateOpenTerrain).map(applyDeadGround);
+export const MISSIONS: Mission[] = expandMaps(RAW_MISSIONS).map(rockifyColumns).map(decorateOpenTerrain).map(applyDeadGround).map(clearScrappedGroundTiles);
 
 export function missionById(id: string): Mission | undefined {
   return MISSIONS.find((m) => m.id === id);

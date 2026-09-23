@@ -530,6 +530,8 @@ export function emptySave(muted = false): SaveData {
     heroDiseases: {},
     rations: STARTING_RATIONS,
     hungerStreak: 0,
+    alertStreak: 0,
+    lastRoadEncounterId: null,
     exploredHexes: [`${START_HEX.x},${START_HEX.y}`],
   };
 }
@@ -628,6 +630,8 @@ function migrateRecord(raw: Record<string, unknown>, muted: boolean): SaveData {
     heroDiseases: cleanHeroDiseases(raw.heroDiseases),
     rations: typeof raw.rations === "number" ? clampInt(raw.rations, 0, 999999) : STARTING_RATIONS,
     hungerStreak: clampInt(raw.hungerStreak, 0, 999999),
+    alertStreak: clampInt(raw.alertStreak, 0, 999999),
+    lastRoadEncounterId: typeof raw.lastRoadEncounterId === "string" ? raw.lastRoadEncounterId : null,
     exploredHexes: cleanExploredHexes(raw.exploredHexes, completed, overworldPos),
   };
 }

@@ -25,6 +25,27 @@ import {
 } from "./shaders";
 
 const ADDITIVE_ELEMENTS: ReadonlySet<ElementKind> = new Set(["fire", "lightning", "acid", "holy"]);
+// Water (and its re-skinned variants) used to sit in the alpha-blend group above, which lets
+// fx.a fully REPLACE whatever pixel it lands on — fine when that pixel is bare ground, wrong
+// when ThreeBattleRenderer is the active renderer, because there decorations and units are
+// baked into the same canvas this pass reads as "the scene" (see BattleCanvas's own comment on
+// why units/decor stay on a separate canvas for the *legacy* 2D renderer only). A unit or prop
+// standing in/near a water placement was getting visually erased and replaced by the water's
+// own color instead of staying visible on top of it. Additive blending can only ever brighten,
+// never replace, so drawing water this way guarantees it can't cover anything, on either
+// renderer — direct fix for "decorations and units must stay in front of the elemental FX"
+// (the water on O Vau/map 1).
+//
+// It is its OWN set, not folded into ADDITIVE_ELEMENTS, because water's own shader brightness
+// (EFFECT_PARAMS.water: color max 0.85 × intensity 0.9) already clears GLOBAL_FX_PARAMS.
+// bloomThreshold (0.55) on its own, and overlapping placements (a whole river of adjacent
+// hexes) stack even brighter under additive blending — surfacing as water visibly glowing at
+// high Brilho/bloomIntensity, which is wrong: water is mundane, not a light source, unlike
+// fire/lightning/acid/holy. render()'s draw order keeps this set OUT of what the bright-pass
+// samples (drawn after that sampling, before the final composite) so it stays additive/
+// non-occluding without ever contributing bloom. Don't fold this into ADDITIVE_ELEMENTS, and
+// don't move its draw call before the bright-pass, without re-solving that glow first.
+const NO_BLOOM_ADDITIVE_ELEMENTS: ReadonlySet<ElementKind> = new Set(["water", "water2", "water3", "water4", "water5"]);
 // webShot casts light (a travelling glow) without joining the additive group above — its own
 // body stays normal alpha-blended (see shaders.ts WEB_SHOT), the same "solid, opaque, glossy"
 // treatment that fixed Cleave/Piercing Thrust washing out over bright ground art; only the
@@ -265,6 +286,34 @@ export class EffectsRenderer {
   private hasLightElements(): boolean {
     for (const fx of this.effects.values()) if (LIGHT_ELEMENTS.has(fx.kind)) return true;
     return false;
+  }
+
+  /** CPU-side answer to "how much extra light falls on this one point right now?", for the
+   * units canvas — a separate DOM canvas stacked above this one, so it can't just sample the
+   * GPU lightmap texture this renderer builds for its own composite (see FRAG_LIGHT/lightFbo
+   * in render() above). Walks the same live effect list with the same falloff shape
+   * (pow(smoothstep(1,0,d), 1.8), d = distance/radius) instead of rasterizing it, since this
+   * only ever needs the value at one point (a unit's feet) rather than a whole screen. Returns
+   * a signed intensity: positive brightens (fire/acid/holy/webShot), negative darkens
+   * (darkness) — 0 when nothing nearby is casting light, so a caller can skip touching
+   * brightness at all rather than applying a no-op filter every frame. */
+  lightBoostAt(px: number, py: number, getAnchor: AnchorProvider): number {
+    let boost = 0;
+    for (const fx of this.effects.values()) {
+      if (!LIGHT_ELEMENTS.has(fx.kind)) continue;
+      const ov = fx.override;
+      const anchor = ov ?? getAnchor(fx.col, fx.row);
+      const radius = ov
+        ? ov.halfWidthPx * GLOBAL_FX_PARAMS.lightRadiusMul * 1.8
+        : anchor.tile * fx.radiusTiles * (fx.kind === "darkness" ? 1 : GLOBAL_FX_PARAMS.lightRadiusMul);
+      if (radius <= 0) continue;
+      const d = Math.min(1, Math.hypot(px - anchor.x, py - anchor.y) / radius);
+      const atten = Math.pow(Math.max(0, 1 - d), 1.8);
+      if (atten <= 0) continue;
+      const params = EFFECT_PARAMS[fx.kind];
+      boost += (fx.kind === "darkness" ? -1 : 1) * atten * params.intensity;
+    }
+    return boost;
   }
 
   private drawQuad(

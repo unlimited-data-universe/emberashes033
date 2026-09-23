@@ -1,4 +1,4 @@
-import { BIG_HOUSE_DECOR_IDS, CAUSTIC_VENOM, CHEST_DECOR_IDS, CHEST_LOOT, CLASSES, CLEAVE, cleaveDoublesVs, cleaveFormula, cleavePower, CURE_DISEASE, CURES, DECORATIONS, DISEASE, DOUBLE_STRIKE, doubleStrikeFormula, doubleStrikePower, EMPTY_BAG, EQUIPMENT, EXP_TO_LEVEL, expForHit, FIREBALL, FOOTPRINT_TYPE_7, FOOTPRINT_TYPE_8, formatSpellUseGains, HIGH_GROUND_LIFT, HOUSE_DECOR_IDS, KILL_DROP_CHANCE, LIGHTNING, LIGHTNING_T3, LONG_SHOT, longShotFormula, longShotPower, MAGIC_MISSILE, magicMissileCount, MAX_LEVEL, PIERCING, piercingMul, PIERCING_THRUST, POTION_CARRY_MAX, POTIONS, RATIONS_ICON, SHOCK, SUMMON_FAMILIAR, SUMMON_FAMILIAR2, SWEEP, TRIP, WEAPON_MAX_ENH, WEAPONS, WEB_OF_DREAMS, healFormula, barricadeDecor, decorationCells, decorationFacing, decorationImage, diceFormula, effectiveMaxRange, enemyLevelFor, equipmentIcon, fireballFormula, fireballOrigin, fireballPower, fireballRangeTiles, fireballTiles, hexAreaTiles, isProjectile, isSummonClass, isBossClass, lightningDice, lightningFormula, lightningTier3Formula, parseLayout, placedFootprint, potionLabel, rollCure, rollDice, rollPotion, shockChargesFor, spellFormula, spellTier, spellUseGains, starterWeaponFor, STARTING_BAG, statsFor, terrainNote, TERRAIN, tierKey, tierUses, gearStatBonus, offHandBlocked, equipmentFitsSlot, equipmentSlotName, equipmentTooltip, weaponTooltip, potionTooltip, weaponIcon, weaponRoll, weightedLootPick, weightedPotionPick, weightedWeaponPick, MULTI_SHOT, multiShotFormula, multiShotPower, multiShotTargets, SECOND_WIND, secondWindPct, auraPower, AURA_OF_PROTECTION, INTIMIDATING_PRESENCE, DIVINE_WRATH, divineWrathFormula, divineWrathPower, SHOULDER_SMASH, shoulderSmashFormula, shoulderSmashPower, SIGHT_RADIUS, STAMPEDE, stampedeFormula, stampedePower, cultistSpellUses, brigandSpellUses, birolhoSpellUses, webOfDreamsSize } from "./data";
+import { BIG_HOUSE_DECOR_IDS, CAUSTIC_VENOM, CHEST_DECOR_IDS, CHEST_LOOT, CLASSES, CLEAVE, cleaveDoublesVs, cleaveFormula, cleavePower, CURE_DISEASE, CURES, DECORATIONS, DISEASE, DOUBLE_STRIKE, doubleStrikeFormula, doubleStrikePower, EMPTY_BAG, EQUIPMENT, EXP_TO_LEVEL, expForHit, FIREBALL, FOOTPRINT_TYPE_7, FOOTPRINT_TYPE_8, formatSpellUseGains, HIGH_GROUND_LIFT, HOUSE_DECOR_IDS, KILL_DROP_CHANCE, LIGHTNING, LIGHTNING_T3, LONG_SHOT, longShotFormula, longShotPower, MAGIC_MISSILE, magicMissileCount, MAX_LEVEL, PIERCING, piercingMul, PIERCING_THRUST, POTION_CARRY_MAX, POTIONS, RATIONS_ICON, SHOCK, SUMMON_FAMILIAR, PHANTASMAL_FORCE, PHANTASMAL_FORCE_UNLOCK_LEVEL, phantasmalForceDice, phantasmalForceFormula, SUMMON_FAMILIAR2, SUMMON_FAMILIAR2_UNLOCK_LEVEL, SUMMON_FAMILIAR3, FAMILIAR_SPELL, familiarSpellCharges, familiarMagicMissileCharges, LIFE_DRAIN, lifeDrainDice, lifeDrainFormula, familiarLifeDrainCharges, lifeDrainHealMul, SWEEP, TRIP, WEAPON_MAX_ENH, WEAPONS, WEB_OF_DREAMS, healFormula, barricadeDecor, decorationCells, decorationFacing, decorationImage, diceFormula, effectiveMaxRange, enemyLevelFor, equipmentIcon, fireballFormula, fireballOrigin, fireballPower, fireballRangeTiles, fireballTiles, hexAreaTiles, isProjectile, isSummonClass, isBossClass, lightningDice, lightningFormula, lightningTier3Formula, parseLayout, placedFootprint, potionLabel, rollCure, rollDice, rollPotion, shockChargesFor, spellFormula, spellTier, spellUseGains, starterWeaponFor, STARTING_BAG, statsFor, terrainNote, TERRAIN, tierKey, tierUses, gearStatBonus, offHandBlocked, equipmentFitsSlot, equipmentSlotName, equipmentTooltip, weaponTooltip, potionTooltip, weaponIcon, weaponRoll, weightedLootPick, weightedPotionPick, weightedWeaponPick, MULTI_SHOT, multiShotFormula, multiShotPower, multiShotTargets, SECOND_WIND, secondWindPct, auraPower, AURA_OF_PROTECTION, INTIMIDATING_PRESENCE, DIVINE_WRATH, divineWrathFormula, divineWrathPower, SHOULDER_SMASH, shoulderSmashFormula, shoulderSmashPower, SIGHT_RADIUS, STAMPEDE, stampedeFormula, stampedePower, cultistSpellUses, brigandSpellUses, birolhoSpellUses, webOfDreamsSize, webOfDreamsSleepChance } from "./data";
 import type { SpellTier } from "./data";
 import { canCounter, makeForecast, mulberry32, powerOf, protOf, rollDamage, rollDamageCustom } from "./combat";
 import {
@@ -92,7 +92,7 @@ interface Particle {
 }
 
 const PARTICLE_CAP = 32;
-const ZOOM_RADII = [22, 34, 50, 72];
+export const ZOOM_RADII = [22, 34, 50, 72];
 
 /** Which WebGL elemental FX shader (see gfx/shaders.ts) a landed spell hit lights up on its
  * target tile(s), and how long that shader patch lingers (seconds) before it self-expires —
@@ -101,9 +101,10 @@ const ZOOM_RADII = [22, 34, 50, 72];
 const SPELL_ELEMENT_FX: Partial<Record<SpellKind, { kind: ElementKind; duration: number }>> = {
   fireball: { kind: "fire", duration: 0.9 },
   causticVenom: { kind: "acid", duration: 1.3 },
-  lightning: { kind: "lightning", duration: 0.45 },
-  lightningTier3: { kind: "lightning", duration: 0.55 },
-  shock: { kind: "lightning", duration: 0.4 },
+  // Lightning/Lightning Tier 3/Choque deliberately have NO entry here — per direct report,
+  // the newer WebGL shader burst this table drives read as an odd "3D" pop layered on top
+  // of the older, plain 2D bolt/spark cue (see emitLightningFx, still called separately for
+  // all three in stepSpell) — that older cue is the only lightning FX any of them get now.
   divineWrath: { kind: "holy", duration: 0.9 },
 };
 
@@ -196,7 +197,6 @@ interface MissileFx {
   seed: number;
 }
 
-const HOUSE_DECORATION_IDS = new Set(["ruined-cottage", "broken-tower", "ruined-chapel", "abandoned-mansion", "burning-house", "burnt-house-ruins", "burning-hamlet", "small-house", "stone-hut"]);
 
 const MISSILE_FX_CAP = 12;
 /** A brief, code-drawn patch of fire on one affected Fireball hex. */
@@ -508,10 +508,34 @@ function pub(u: Unit, restrained: boolean, movLeft: number): UnitPublic {
     fullness: u.fullness,
     offHandId: u.offHandId,
     summoned: u.summoned,
+    spellCharges: u.spellCharges,
+    lifeDrainCharges: u.lifeDrainCharges,
     asleep: u.asleep,
     restrained,
     gear: { ...u.gear },
   };
+}
+
+/** Everything BattleEngine.computeUnitVisual derives about a unit's current animated pose —
+ * shared between renderUnitsAndOverlays' own Canvas2D draw loop and ThreeBattleRenderer's unit
+ * meshes (see the public unitVisual() wrapper) so the two never compute this differently. */
+export interface UnitVisual {
+  img: HTMLImageElement | undefined;
+  w: number;
+  h: number;
+  /** How far below the unit's anchor position its feet sit (Y-down). */
+  footY: number;
+  bob: number;
+  sway: number;
+  breath: number;
+  lift: number;
+  /** The exact ctx.scale(scaleX, scaleY) factors renderUnitsAndOverlays applies — scaleX's
+   * sign carries facing/mirroring, its magnitude (and scaleY) the breath squash/stretch. */
+  scaleX: number;
+  scaleY: number;
+  /** Extra downward shift of the image's own box (cultistV2's cast pose only) — see
+   * computeUnitVisual's comment on why its cast cut needs this. */
+  footOffset: number;
 }
 
 interface Roster {
@@ -533,9 +557,15 @@ interface Roster {
    * above is the one slot combat already read; this brings the rest in so worn gear can
    * contribute stats (see gearStatBonus). */
   equipment?: Record<string, Partial<Record<EquipSlot, string>>>;
-  /** Enemy name → level override, for Map Editor balance-testing. Falls back to the
-   * mission's uniform enemyLevelFor(index) when a name has no entry. */
-  enemyLevels?: Record<string, number>;
+  /** Index into mission.enemySpawns → level override, for Map Editor balance-testing.
+   * Falls back to the mission's uniform enemyLevelFor(index) when an index has no entry.
+   * Keyed by index rather than name because enemy spawns routinely share a name (several
+   * "Piqueiro" on the same map) — a name-keyed map collapsed every same-named spawn's
+   * override onto one shared entry, which is why a level typed into the editor for one of
+   * several duplicates silently didn't take. */
+  enemyLevels?: Record<number, number>;
+  /** Same idea as enemyLevels, but indexing mission.neutralSpawns instead. */
+  neutralLevels?: Record<number, number>;
   /** Every weapon id already in the player's save — chest and kill-drop loot rolls exclude
    * these so a drop never announces a weapon the player already has. */
   ownedWeaponIds?: string[];
@@ -602,6 +632,15 @@ const HERO_SPRITE_BY_NAME: Partial<Record<string, SpriteId>> = {
   Malrec: "malrec",
 };
 
+/** The name-pin above, with the mission editor's per-spawn escape hatch (Spawn.useClassSprite
+ * — see its doc comment in types.ts) applied first: set, it renders with classId's own class
+ * sprite instead, so any enemy/creature classId dropped into a hero-named slot actually shows
+ * up as itself rather than snapping back to that hero's pinned look. */
+function resolveHeroSprite(name: string, classSprite: SpriteId, useClassSprite?: boolean): SpriteId {
+  if (useClassSprite) return classSprite;
+  return HERO_SPRITE_BY_NAME[name] ?? classSprite;
+}
+
 function spawnUnit(spawn: Mission["playerSpawns"][number], side: Unit["side"], i: number, roster?: Roster, enemyLevel = 1): Unit {
   const requestedClassId = (side === "player" ? roster?.promotions?.[spawn.name] : undefined) ?? spawn.classId;
   // Kael's early/final entries are visual variants, never gameplay jobs. Every unit named
@@ -612,7 +651,12 @@ function spawnUnit(spawn: Mission["playerSpawns"][number], side: Unit["side"], i
   const isKael = spawn.name === "Kael";
   const classId = isKael ? "swordsman" : requestedClassId;
   const cls = CLASSES[classId];
-  const level = side === "enemy" ? (roster?.enemyLevels?.[spawn.name] ?? enemyLevel) : (roster?.levels[spawn.name] ?? 1);
+  const level =
+    side === "enemy"
+      ? (roster?.enemyLevels?.[i] ?? enemyLevel)
+      : side === "neutral"
+        ? (roster?.neutralLevels?.[i] ?? enemyLevel)
+        : (roster?.levels[spawn.name] ?? 1);
   const st = statsFor(classId, level);
   // PROJECT RULE — do not remove, weaken, or special-case around this for any class,
   // existing or new. Player heroes get to choose where their level-up points go
@@ -664,7 +708,8 @@ function spawnUnit(spawn: Mission["playerSpawns"][number], side: Unit["side"], i
     className: cls.name,
     role: cls.role,
     side,
-    sprite: HERO_SPRITE_BY_NAME[spawn.name] ?? cls.sprite,
+    sprite: resolveHeroSprite(spawn.name, cls.sprite, spawn.useClassSprite),
+    useClassSprite: spawn.useClassSprite,
     x: spawn.x,
     y: spawn.y,
     hp,
@@ -684,6 +729,7 @@ function spawnUnit(spawn: Mission["playerSpawns"][number], side: Unit["side"], i
     acted: false,
     facing: side === "player" ? 1 : -1,
     walkPose: "front",
+    idleAlt: false,
     alive: true,
     drawX: spawn.x,
     drawY: spawn.y,
@@ -777,7 +823,8 @@ function unitFromSnap(snap: BattleUnitSnap): Unit {
     className: cls?.name ?? classId,
     role: cls?.role ?? "",
     side: snap.side,
-    sprite: HERO_SPRITE_BY_NAME[snap.name] ?? cls?.sprite ?? "soldier",
+    sprite: resolveHeroSprite(snap.name, cls?.sprite ?? "soldier", snap.useClassSprite),
+    useClassSprite: snap.useClassSprite,
     x: snap.x,
     y: snap.y,
     hp: snap.hp,
@@ -796,6 +843,7 @@ function unitFromSnap(snap: BattleUnitSnap): Unit {
     acted: snap.acted,
     facing: snap.facing,
     walkPose: "front",
+    idleAlt: false,
     alive: snap.alive,
     drawX: snap.x,
     drawY: snap.y,
@@ -893,8 +941,13 @@ export class BattleEngine {
   reach: Map<string, ReachCell> = new Map();
   attackFrom: Map<string, Point> = new Map();
   /** Active Web of Dreams patches (Conjurer tier 2) — cast, not terrain, so they live here
-   * rather than on the map. Ticks down by one every startNewRound and is dropped at 0. */
-  webZones: { cells: Set<string>; roundsLeft: number; createdAt?: number }[] = [];
+   * rather than on the map. Ticks down by one every startNewRound and is dropped at 0.
+   * center/radius (the cast cell and hexAreaTiles' own radius) are the zone's hex-cluster
+   * shape, kept alongside `cells` so BattleCanvas can size ONE WebGL "web" effect over the
+   * whole zone (see webZoneRadiusTiles) instead of stamping a separate copy per hex — that
+   * per-hex stamping used to be the only option and is what used to clash into a snowflake
+   * cluster on anything bigger than a single hex. */
+  webZones: { cells: Set<string>; roundsLeft: number; createdAt?: number; center?: Point; radius?: number; sleepChance?: number }[] = [];
   /** One-shot WebGL elemental FX spawn requests queued by a landed spell hit (see
    * SPELL_ELEMENT_FX/queueElementalFx) — BattleCanvas's render loop drains this every frame
    * and calls EffectsRenderer.spawnEffect for each, since `fx` itself only exists over there.
@@ -1083,8 +1136,15 @@ export class BattleEngine {
   /** After a mid-battle load, the next beginUnitTurn must not re-run start-of-turn effects
    * (echo, poison, stun skip) — those already happened on the turn we saved in the middle of. */
   private skipStartOfTurn = false;
+  /** Test-mode-only: drops every ally/enemy/condition restriction on who a spell can target
+   * (targetable's side check, healing/curing an enemy, aiming at a full-HP or undiseased
+   * unit) so a debug session can freely fire any spell at any unit just to look at its FX,
+   * without the normal "that's not a valid target" gameplay rules getting in the way. Wired
+   * from GameApp's testMode — never true for a real save. */
+  private debugFreeCast = false;
 
-  constructor(mission: Mission, art: GameArt, roster: Roster, seed = 1) {
+  constructor(mission: Mission, art: GameArt, roster: Roster, seed = 1, debugFreeCast = false) {
+    this.debugFreeCast = debugFreeCast;
     this.mission = mission;
     this.art = art;
     this.ownedWeapons = new Set(roster.ownedWeaponIds ?? []);
@@ -1116,18 +1176,6 @@ export class BattleEngine {
       const img = new Image();
       img.src = decorationImage(p.id);
       this.art.decorations[p.id] = img;
-    }
-    // Legacy house props previously stamped highruin beneath themselves. Houses are now purely
-    // transparent isometric art, so clear only that old auto-stamped terrain on their footprint.
-    const houseFloor: TerrainId = this.tiles.includes("nave") ? "nave" : "plains";
-    for (const p of this.decorations) {
-      if (!HOUSE_DECORATION_IDS.has(p.id)) continue;
-      for (const { dx, dy } of placedFootprint(p)) {
-        const x = p.x + dx;
-        const y = p.y + dy;
-        const index = y * this.cols + x;
-        if (x >= 0 && x < this.cols && y >= 0 && y < this.rows && this.tiles[index] === "highruin") this.tiles[index] = houseFloor;
-      }
     }
     // A decoration that names a tile (barricade, locked chest, rocks) stamps that terrain so
     // the picture and the rules cannot disagree. A prop with no tile — tree, fallen log —
@@ -1309,7 +1357,7 @@ export class BattleEngine {
                   kind: "webOfDreams" as const,
                   roundsLeft: hoveredWeb.roundsLeft,
                   movementCap: 1,
-                  sleepChance: WEB_OF_DREAMS.sleepChance,
+                  sleepChance: hoveredWeb.sleepChance ?? WEB_OF_DREAMS.sleepChance,
                   sleepDice: diceFormula(WEB_OF_DREAMS.sleepDice, WEB_OF_DREAMS.sleepFaces, 0),
                 }
               : undefined,
@@ -1509,6 +1557,7 @@ export class BattleEngine {
         guaranteedDrop: u.guaranteedDrop,
         dialog: u.dialog,
         moveBudgetUsed: u.moveBudgetUsed,
+        useClassSprite: u.useClassSprite,
       };
       return snap;
     });
@@ -1539,7 +1588,7 @@ export class BattleEngine {
       lootWeapons: [...this.lootWeapons],
       lootEquipment: [...this.lootEquipment],
       ownedWeapons: [...this.ownedWeapons],
-      webZones: this.webZones.map((z) => ({ cells: [...z.cells], roundsLeft: z.roundsLeft })),
+      webZones: this.webZones.map((z) => ({ cells: [...z.cells], roundsLeft: z.roundsLeft, center: z.center, radius: z.radius, sleepChance: z.sleepChance })),
       auraZones: this.auraZones.map((z) => ({
         cells: [...z.cells],
         roundsLeft: z.roundsLeft,
@@ -1586,7 +1635,7 @@ export class BattleEngine {
     this.lootWeapons = [...snap.lootWeapons];
     this.lootEquipment = [...snap.lootEquipment];
     this.ownedWeapons = new Set(snap.ownedWeapons);
-    this.webZones = snap.webZones.map((z) => ({ cells: new Set(z.cells), roundsLeft: z.roundsLeft }));
+    this.webZones = snap.webZones.map((z) => ({ cells: new Set(z.cells), roundsLeft: z.roundsLeft, center: z.center, radius: z.radius, sleepChance: z.sleepChance }));
     this.auraZones = snap.auraZones.map((z) => ({
       cells: new Set(z.cells),
       roundsLeft: z.roundsLeft,
@@ -1638,6 +1687,15 @@ export class BattleEngine {
   tick(dt: number): void {
     const cap = Math.min(0.05, dt);
     this.time += cap;
+    // Same speedMode scaling stepActive applies to combat/spell/heal's own a.t (see there for
+    // the full explanation) — applied here too, to every spell/attack VISUAL effect timer
+    // (missile bolts, fireball bursts, lightning, holy rays, blade sweeps, summon portals) so
+    // they stay in lockstep with the now-slower hit timing instead of the bolt still zipping
+    // across the screen at the old speed while the damage/hit-tick that's supposed to land
+    // right as it arrives now fires later. Ambient stuff below (particles, level-up sparks,
+    // bob/breathing, fade) deliberately stays on the unscaled `cap` — slowing those down too
+    // would make idle units look like they're moving through syrup for no reason.
+    const actionCap = cap * (this.speedMode === "fast" ? 1 : this.speedMode === "slow" ? 0.4 : 0.65);
     if (this.tip !== this.lastTipSeen) {
       this.lastTipSeen = this.tip;
       this.tipSetAt = this.time;
@@ -1702,7 +1760,16 @@ export class BattleEngine {
       let live = 0;
       for (const m of this.missileFx) {
         if (!m.live) continue;
-        m.t += cap;
+        m.t += actionCap;
+        // Track the bolt itself while it's actually in flight (not the afterglow lingering
+        // once it's landed) — same one-time ensureVisible nudge startSeq already does for the
+        // cast's start/end points, just repeated every frame along the flight path so the
+        // camera pans smoothly with a fast-travelling shot instead of only snapping to catch
+        // up once it's already arrived.
+        if (m.t < m.travel) {
+          const k = m.t / m.travel;
+          this.ensureVisible(m.fromX + (m.toX - m.fromX) * k, m.fromY + (m.toY - m.fromY) * k);
+        }
         if (m.t >= m.max) {
           m.live = false;
           continue;
@@ -1715,7 +1782,7 @@ export class BattleEngine {
       let live = 0;
       for (const burst of this.fireballBurstFx) {
         if (!burst.live) continue;
-        burst.t += cap;
+        burst.t += actionCap;
         if (burst.t >= burst.max) { burst.live = false; continue; }
         live += 1;
       }
@@ -1725,7 +1792,7 @@ export class BattleEngine {
       let live = 0;
       for (const l of this.lightningFx) {
         if (!l.live) continue;
-        l.t += cap;
+        l.t += actionCap;
         if (l.t >= l.max) {
           l.live = false;
           continue;
@@ -1738,7 +1805,7 @@ export class BattleEngine {
       let live = 0;
       for (const h of this.holyFx) {
         if (!h.live) continue;
-        h.t += cap;
+        h.t += actionCap;
         if (h.t >= h.max) {
           h.live = false;
           continue;
@@ -1751,7 +1818,7 @@ export class BattleEngine {
       let live = 0;
       for (const b of this.bladeFx) {
         if (!b.live) continue;
-        b.t += cap;
+        b.t += actionCap;
         if (b.t >= b.max) {
           b.live = false;
           continue;
@@ -1764,7 +1831,7 @@ export class BattleEngine {
       let live = 0;
       for (const p of this.portalFx) {
         if (!p.live) continue;
-        p.t += cap;
+        p.t += actionCap;
         if (p.t >= p.max) {
           p.live = false;
           continue;
@@ -1794,10 +1861,30 @@ export class BattleEngine {
 
   /** Point a directional sprite (conjurer / lancer) at a column so walk and attack
    * play the matching left/right cut instead of a mirrored idle. Other sprites keep
-   * the historical "facing = 1 shows the sheet as drawn" convention. */
+   * the historical "facing = 1 shows the sheet as drawn" convention — EXCEPT familiar3,
+   * morvenian-wolf and mordavian-wolf, whose facing drives render()'s ordinary CSS mirror
+   * (dirAction is false for them, same as every other non-directional sprite) rather than
+   * an asset pick, but which were never in this update path at all: outside faceSpriteToward, u.facing only
+   * ever changes from actually walking (see the stepMove branch that sets it), so a unit
+   * that attacked without moving, or moved one way and then got attacked from the other
+   * side, kept whatever stale facing its last step left behind instead of turning to face
+   * the fight — the "not facing the enemy" report, distinct from (and left uncaught by) the
+   * earlier mirrored-attack-frame fix above familiar3Scale. */
   private faceSpriteToward(id: string, x: number): void {
     const u = this.units.find((n) => n.id === id);
-    if (!u || (u.sprite !== "aldric" && u.sprite !== "defaultLancer" && u.sprite !== "lancer" && u.sprite !== "sandoval" && u.sprite !== "conjurer" && u.sprite !== "malrec")) return;
+    if (
+      !u ||
+      (u.sprite !== "aldric" &&
+        u.sprite !== "defaultLancer" &&
+        u.sprite !== "lancer" &&
+        u.sprite !== "sandoval" &&
+        u.sprite !== "conjurer" &&
+        u.sprite !== "malrec" &&
+        u.sprite !== "familiar3" &&
+        u.sprite !== "morvenian-wolf" &&
+        u.sprite !== "mordavian-wolf")
+    )
+      return;
     if (x > u.x) u.facing = 1;
     else if (x < u.x) u.facing = -1;
   }
@@ -1821,7 +1908,12 @@ export class BattleEngine {
       const attacker = this.units.find((u) => u.id === step.att);
       this.faceSpriteToward(step.att, target.x);
       this.faceSpriteToward(step.def, attacker?.x ?? target.x);
-      if (attacker && attacker.side !== "player") {
+      // Bring both ends of the attack into view regardless of who's acting — this used to be
+      // enemy-only (side !== "player"), which meant the camera dutifully followed every enemy
+      // swing but never panned to show the PLAYER's own target when it was off past the turn's
+      // starting view. That read as "the camera doesn't follow spells" even though it was
+      // working fine — just only for the other side.
+      if (attacker) {
         this.ensureVisible(attacker.x, attacker.y);
         this.ensureVisible(target.x, target.y);
       }
@@ -1876,10 +1968,14 @@ export class BattleEngine {
         const tx = look?.x ?? step.tiles[0]?.x;
         if (tx != null) this.faceSpriteToward(step.att, tx);
         const caster = this.units.find((u) => u.id === step.att);
-        if (caster && caster.side !== "player") {
+        // Same fix as the combat branch above: this was enemy-only (side !== "player"), so a
+        // player's own spell never panned the camera toward its target — only ever the caster,
+        // wherever the camera already happened to be sitting from the start of their turn.
+        // ensureAreaVisible covers the whole blast/cone/line, not just its centroid, so a wide
+        // AOE's far edge isn't left off-screen just because its middle fit.
+        if (caster) {
           this.ensureVisible(caster.x, caster.y);
-          const firstTile = step.tiles[0];
-          if (firstTile) this.ensureVisible(firstTile.x, firstTile.y);
+          this.ensureAreaVisible(step.tiles);
         }
       }
       this.banner = step.label ?? "";
@@ -1887,6 +1983,13 @@ export class BattleEngine {
       if (step.spellKind === "magicMissile") {
         const caster = this.units.find((u) => u.id === step.att);
         if (caster) for (const t of step.tiles) this.emitMissileFx(caster.x, caster.y, t.x, t.y, "magicMissile");
+      }
+      // No dedicated art yet — reuses Magic Missile's own bolt FX, same as Phantasmal Force's
+      // spell-icon fallback in GameApp.tsx.
+      if (step.spellKind === "phantasmalForce") {
+        const caster = this.units.find((u) => u.id === step.att);
+        const target = step.tiles[0];
+        if (caster && target) this.emitMissileFx(caster.x, caster.y, target.x, target.y, "magicMissile");
       }
       if (step.spellKind === "fireball" || step.spellKind === "causticVenom") {
         const caster = this.units.find((u) => u.id === step.att);
@@ -1918,7 +2021,9 @@ export class BattleEngine {
       const healed = this.units.find((u) => u.id === step.def);
       if (healed) this.faceSpriteToward(step.att, healed.x);
       const healer = this.units.find((u) => u.id === step.att);
-      if (healer && healer.side !== "player") this.ensureVisible(healer.x, healer.y);
+      // Same enemy-only fix as combat/spell above.
+      if (healer) this.ensureVisible(healer.x, healer.y);
+      if (healed) this.ensureVisible(healed.x, healed.y);
     } else if (step.type === "cureDisease") {
       this.active = { type: "cureDisease", att: step.att, def: step.def, t: 0, applied: false };
       this.banner = CURE_DISEASE.name;
@@ -1962,7 +2067,17 @@ export class BattleEngine {
         this.active = null;
         return;
       }
-      if (to.x !== from.x) unit.facing = to.x > from.x ? 1 : -1;
+      // Comparing logical column (to.x vs from.x) used to leave a "straight-up/straight-down"
+      // hex neighbor (hexNeighbors' [0,-1]/[0,1] entries, same column) with no left/right info
+      // at all — a unit walking due north/south kept whatever facing it had and visibly walked
+      // sideways with its back leading. That was the wrong axis to check: this is a row-staggered
+      // grid (hexCenter's cx depends on row & 1), so even a same-column step shifts the unit a
+      // little left or right ON SCREEN — never zero, for any of the six neighbor directions.
+      // Comparing actual screen position instead turns correctly on every single step, including
+      // a move that's only one hex and never touches a different column at all.
+      const fromScreen = this.hexCenter(from.x, from.y);
+      const toScreen = this.hexCenter(to.x, to.y);
+      if (toScreen.cx !== fromScreen.cx) unit.facing = toScreen.cx > fromScreen.cx ? 1 : -1;
       unit.walkPose = to.y < from.y ? "back" : to.y > from.y ? "front" : "side";
       a.t += dt;
       const dur = this.speedMode === "fast" ? 0.12 : this.speedMode === "slow" ? 0.36 : 0.22;
@@ -1995,10 +2110,24 @@ export class BattleEngine {
       }
       return;
     }
-    if (a.type === "combat") this.stepCombat(a, dt);
-    if (a.type === "spell") this.stepSpell(a, dt);
-    if (a.type === "heal") this.stepHeal(a, dt);
-    if (a.type === "cureDisease") this.stepCureDisease(a, dt);
+    // Movement already scales its own duration directly off speedMode (see `dur` above) —
+    // combat/spell/heal never did, they always ran at one hardcoded pace no matter what the
+    // player picked, which is why "Lenta" visibly slowed walking but did nothing for the part
+    // that actually needs slowing down: the hit itself, a bolt's flight, an AOE's burst. This
+    // scales the dt these four steppers see instead of touching every fixed-time threshold
+    // inside them individually (stepCombat/stepSpell/stepHeal/stepCureDisease are full of
+    // those, e.g. stepSpell's finishCombat/afterglow timing) — a smaller dt makes `a.t` climb
+    // toward those same unchanged thresholds more slowly, uniformly stretching the whole
+    // animation without touching the careful relative timing between its stages.
+    // "Rápida" keeps today's actual speed (unchanged, for players who already picked it and
+    // are happy with it); "Normal" is deliberately slowed down some on its own, since this was
+    // the direct, repeated report — the default pace read as too fast to actually see what
+    // just happened; "Lenta" is slowed down a lot, enough to really watch a cast land.
+    const actionDt = dt * (this.speedMode === "fast" ? 1 : this.speedMode === "slow" ? 0.4 : 0.65);
+    if (a.type === "combat") this.stepCombat(a, actionDt);
+    if (a.type === "spell") this.stepSpell(a, actionDt);
+    if (a.type === "heal") this.stepHeal(a, actionDt);
+    if (a.type === "cureDisease") this.stepCureDisease(a, actionDt);
   }
 
   private stepCombat(a: CombatAnim, dt: number): void {
@@ -2186,10 +2315,18 @@ export class BattleEngine {
     a.t += dt;
     const arrowSpell = a.spellKind === "longShot" || a.spellKind === "multiShot" || a.spellKind === "piercing";
     const hitAt = arrowSpell ? ARROW_TRAVEL : a.spellKind === "magicMissile" || a.spellKind === "fireball" || a.spellKind === "causticVenom" ? MISSILE_HIT_AT : 0.18;
+    // Weapon-based skills routed through this same SpellAnim machinery for their multi-target
+    // reach (bow shots, Cleave, Sweep, the two charge skills) are not magic — only the actual
+    // spellcasters' kinds get the casting cue below.
+    const meleeSkill = a.spellKind === "cleave" || a.spellKind === "sweep" || a.spellKind === "shoulderSmash" || a.spellKind === "stampede";
     if (!a.hit && a.t >= hitAt) {
       a.hit = true;
       if (a.spellKind === "webOfDreams") sfxPlay.dreamingWeb();
       else if (att.sprite === "cultist-v2") sfxPlay.cultistV2Spellcast();
+      // Long Shot/Multi Shot/Piercing are bow skills — the blunt melee cue is wrong for them,
+      // same reasoning as arrowAttack in stepCombat's plain bow attack.
+      else if (arrowSpell) sfxPlay.arrowAttack();
+      else if (meleeSkill) sfxPlay.meleeAttack();
       else sfxPlay.spell();
       // AoE/line spells: the first enemy actually hit grants full XP, every enemy after
       // that in the same cast grants half — hitting a whole group shouldn't out-earn
@@ -2274,6 +2411,33 @@ export class BattleEngine {
         foe.flash = 1;
         this.provoke(foe, att);
         if (a.poison) foe.poisoned = true;
+        // Dreno de Vida: heals the familiar's own summoning conjurer for a share of the
+        // damage it just dealt (see lifeDrainHealMul) — off the real rolled damage, not a
+        // separate estimate, same reasoning as every other on-hit effect in this loop.
+        if (a.spellKind === "lifeDrain") {
+          const healer = this.units.find((u) => u.id === att.summonerId && u.alive);
+          if (healer) {
+            const gained = Math.min(Math.round(dmg * lifeDrainHealMul(att.level)), healer.maxHp - healer.hp);
+            if (gained > 0) {
+              healer.hp += gained;
+              healer.healGlow = 1;
+              healer.healGlowKind = "holyMinor";
+              this.emitParticle({
+                x: healer.drawX,
+                y: healer.drawY - 0.35,
+                vx: 0,
+                vy: -0.18,
+                life: 0,
+                max: 2,
+                size: 1,
+                color: "#d8ead2",
+                text: `+${gained}`,
+                kind: "text",
+                frame: 0,
+              });
+            }
+          }
+        }
         // AoE/line abilities (fireball, cleave, piercing...) run this once per unit actually
         // hit, so every landed hit grants its own XP — piercing can also clip an ally in the
         // line, which must never grant XP.
@@ -2481,12 +2645,17 @@ export class BattleEngine {
    * replacing it. */
   private static readonly KILL_EXP_BONUS_MUL = 1.25;
 
+  /** A summoned familiar never persists past this battle to keep XP of its own, so its
+   * attacks/spells/counters instead pay its summoning conjurer this fraction of what a real
+   * unit would have earned — floored in grantExp below, never rounded up, so a small gain (a
+   * familiar's own flat 1 XP counter, say) becomes 0 rather than bouncing back up to 1. */
+  private static readonly FAMILIAR_XP_SHARE = 0.1;
+
   private gainExp(attacker: Unit, targetLevel: number, amount: number, multiplier = 1, isKill = false): void {
     if (amount <= 0 || attacker.side !== "player" || !attacker.alive) return;
-    if (attacker.level >= MAX_LEVEL) return;
     const killMul = isKill ? BattleEngine.KILL_EXP_BONUS_MUL : 1;
     const gained = Math.round(expForHit(attacker.level, targetLevel) * multiplier * killMul);
-    this.addExp(attacker, gained);
+    this.grantExp(attacker, gained);
   }
 
   /** A successful counter always earns exactly 1 XP — flat, no level-gap scaling, no kill
@@ -2494,8 +2663,22 @@ export class BattleEngine {
    * only caps what it's worth in experience, so a unit can't out-level by baiting hits and
    * countering instead of attacking. */
   private gainCounterExp(attacker: Unit): void {
-    if (attacker.side !== "player" || !attacker.alive || attacker.level >= MAX_LEVEL) return;
-    this.addExp(attacker, 1);
+    if (attacker.side !== "player" || !attacker.alive) return;
+    this.grantExp(attacker, 1);
+  }
+
+  /** Routes earned XP to whoever should actually keep it: a summoned familiar (summonerId
+   * set) redirects FAMILIAR_XP_SHARE of its own gain to its summoning conjurer instead of
+   * keeping any itself; every other unit keeps 100% of its own gain, unchanged from before. */
+  private grantExp(attacker: Unit, amount: number): void {
+    if (attacker.summonerId) {
+      const conjurer = this.units.find((u) => u.id === attacker.summonerId);
+      if (!conjurer || conjurer.side !== "player" || !conjurer.alive || conjurer.level >= MAX_LEVEL) return;
+      this.addExp(conjurer, Math.floor(amount * BattleEngine.FAMILIAR_XP_SHARE));
+      return;
+    }
+    if (attacker.level >= MAX_LEVEL) return;
+    this.addExp(attacker, amount);
   }
 
   private addExp(attacker: Unit, gained: number): void {
@@ -3270,6 +3453,27 @@ export class BattleEngine {
     return null;
   }
 
+  /** Whoever the board should visually credit as "acting right now" — for activeTurnHighlight
+   * only, never for turn-order logic (which stays on activeTurnUnit/`.moved` exactly as it
+   * is). Enemy AI (runAiFor) sets `.moved = true` the instant it DECIDES to move, not once the
+   * queued walk actually finishes — turn-advancement needs that (tick() only looks for the
+   * next unit once `this.queue` fully drains, so the flag has to already be true by then), but
+   * it means an enemy's own `activeTurnUnit()` stops returning it before its walk animation
+   * even starts, so the hex vanished mid-move ("enemies have no hex when they move", a direct
+   * complaint). Prefer whoever `this.active` (the queue item currently mid-playback) actually
+   * belongs to — `.id` on a move, `.att` on everything else with an actor — falling back to
+   * activeTurnUnit() the rest of the time (nothing queued, or a queue item with no actor, like
+   * a banner/delay). */
+  private visuallyActingUnit(): Unit | null {
+    const a = this.active as { id?: string; att?: string } | null;
+    const actorId = a?.id ?? a?.att;
+    if (actorId) {
+      const u = this.units.find((x) => x.id === actorId);
+      if (u && u.alive) return u;
+    }
+    return this.activeTurnUnit();
+  }
+
   private select(unit: Unit): void {
     if (unit.side !== "player" || !unit.alive || unit.moved || this.phase !== "player") {
       this.inspect(unit);
@@ -3468,9 +3672,25 @@ export class BattleEngine {
     sfxPlay.ui();
   }
 
+  /** `kind`'s remaining casts for `u` this battle: a familiar casting its OWN spell (see
+   * FAMILIAR_SPELL) draws from its own spellCharges (set at summon time, never a slot-table
+   * tier — see familiarSpellCharges); every other caster (including a familiar's other
+   * actions, which is a no-op since they have none) uses the normal tier-slot pool. */
+  private familiarSpellRemaining(u: Unit, kind: SpellKind): number {
+    return FAMILIAR_SPELL[u.classId] === kind ? (u.spellCharges ?? 0) : this.tierRemaining(u, kind);
+  }
+
+  /** Spends one cast of `kind` for `u`: its own spellCharges if `kind` is that familiar's own
+   * spell (see FAMILIAR_SPELL), otherwise the normal tier-slot pool — has to agree with
+   * familiarSpellRemaining above on which pool a given (unit, kind) pair actually draws from. */
+  private spendFamiliarOrTier(u: Unit, kind: SpellKind): void {
+    if (FAMILIAR_SPELL[u.classId] === kind) u.spellCharges = Math.max(0, (u.spellCharges ?? 1) - 1);
+    else this.spendTier(u, kind);
+  }
+
   startFireball(): void {
     const u = this.units.find((x) => x.id === this.selectedId);
-    if (!u || u.acted || this.tierRemaining(u, "fireball") <= 0) return;
+    if (!u || u.acted || this.familiarSpellRemaining(u, "fireball") <= 0) return;
     this.mode = "awaitSpell";
     this.spellKind = "fireball";
     this.spellArmed = false;
@@ -3542,7 +3762,7 @@ export class BattleEngine {
 
   startMagicMissile(): void {
     const u = this.units.find((x) => x.id === this.selectedId);
-    if (!u || u.acted || this.tierRemaining(u, "magicMissile") <= 0) return;
+    if (!u || u.acted || this.familiarSpellRemaining(u, "magicMissile") <= 0) return;
     this.mode = "awaitSpell";
     this.spellKind = "magicMissile";
     this.spellArmed = false;
@@ -3550,6 +3770,21 @@ export class BattleEngine {
     this.hover = null;
     const shots = magicMissileCount(u.level);
     this.tip = `${MAGIC_MISSILE.name}: alcance ${MAGIC_MISSILE.range}, ${spellFormula(u.mag, MAGIC_MISSILE.mul, MAGIC_MISSILE.dice, MAGIC_MISSILE.faces, MAGIC_MISSILE.bonus)} − RES por míssil. ${shots} míssil${shots > 1 ? "eis, um alvo cada (pode repetir)" : ""}. Acerto garantido. Toque no inimigo.`;
+    sfxPlay.ui();
+  }
+
+  /** Familiar Maior's own second spell — its own dedicated lifeDrainCharges pool, never the
+   * generic familiarSpellRemaining/spendFamiliarOrTier machinery (that's reserved for the ONE
+   * own-spell every other familiar tier has). */
+  startLifeDrain(): void {
+    const u = this.units.find((x) => x.id === this.selectedId);
+    if (!u || u.acted || (u.lifeDrainCharges ?? 0) <= 0) return;
+    this.mode = "awaitSpell";
+    this.spellKind = "lifeDrain";
+    this.spellArmed = false;
+    this.spellAim = null;
+    this.hover = null;
+    this.tip = `${LIFE_DRAIN.name}: alcance ${LIFE_DRAIN.range}, ${lifeDrainFormula(u.level, u.mag)} − RES, cura o invocador em ${Math.round(lifeDrainHealMul(u.level) * 100)}% do dano causado. Toque no inimigo.`;
     sfxPlay.ui();
   }
 
@@ -3638,27 +3873,89 @@ export class BattleEngine {
     sfxPlay.ui();
   }
 
+  /** One of each familiar tier at a time per caster — a conjurer re-casting a tier it
+   * already has out just replaces nothing and clutters the field, so every summonFamiliarX
+   * entry point (start and cast, both checked for the same reason spellAimValid AND
+   * castX both validate range) blocks while a living familiar of that exact class still
+   * carries this caster's id as its summonerId. Tiers stack freely with each other — this is
+   * a per-tier cap, not "one familiar total". */
+  private hasFamiliarOut(caster: Unit, classId: ClassId): boolean {
+    return this.units.some((u) => u.alive && u.summonerId === caster.id && u.classId === classId);
+  }
+
   startSummonFamiliar(): void {
     const u = this.units.find((x) => x.id === this.selectedId);
     if (!u || u.acted || this.tierRemaining(u, "summonFamiliar") <= 0) return;
+    if (this.hasFamiliarOut(u, "familiar")) {
+      this.tip = `${u.name} já tem ${SUMMON_FAMILIAR.name} invocado.`;
+      sfxPlay.ui();
+      return;
+    }
     this.mode = "awaitSpell";
     this.spellKind = "summonFamiliar";
     this.spellArmed = false;
     this.spellAim = null;
     this.hover = null;
-    this.tip = `${SUMMON_FAMILIAR.name}: convoca um aliado com metade dos seus atributos atuais, até ${SUMMON_FAMILIAR.range} hexes. Toque num espaço livre.`;
+    this.tip = `${SUMMON_FAMILIAR.name}: convoca um aliado com metade dos seus atributos atuais, até ${SUMMON_FAMILIAR.range} hexes. Pode lançar Míssil Mágico por conta própria. Toque num espaço livre.`;
+    sfxPlay.ui();
+  }
+
+  /** Conjurer tier 1's second spell — shares Invocar Familiar's own tier-1 pool of uses
+   * (tierRemaining/spendTier), but gated further by the caster's own level, since tierUses
+   * alone can't express "unlocked partway through a tier both spells already share". */
+  startPhantasmalForce(): void {
+    const u = this.units.find((x) => x.id === this.selectedId);
+    if (!u || u.acted || this.tierRemaining(u, "phantasmalForce") <= 0) return;
+    if (u.level < PHANTASMAL_FORCE_UNLOCK_LEVEL) {
+      this.tip = `${PHANTASMAL_FORCE.name} disponível a partir do nível ${PHANTASMAL_FORCE_UNLOCK_LEVEL}.`;
+      sfxPlay.ui();
+      return;
+    }
+    this.mode = "awaitSpell";
+    this.spellKind = "phantasmalForce";
+    this.spellArmed = false;
+    this.spellAim = null;
+    this.hover = null;
+    this.tip = `${PHANTASMAL_FORCE.name}: alcance ${PHANTASMAL_FORCE.range}, ${phantasmalForceFormula(u.level, u.mag)} − RES. Toque no inimigo.`;
     sfxPlay.ui();
   }
 
   startSummonFamiliar2(): void {
     const u = this.units.find((x) => x.id === this.selectedId);
     if (!u || u.acted || this.tierRemaining(u, "summonFamiliar2") <= 0) return;
+    if (u.level < SUMMON_FAMILIAR2_UNLOCK_LEVEL) {
+      this.tip = `${SUMMON_FAMILIAR2.name} disponível a partir do nível ${SUMMON_FAMILIAR2_UNLOCK_LEVEL}.`;
+      sfxPlay.ui();
+      return;
+    }
+    if (this.hasFamiliarOut(u, "familiar2")) {
+      this.tip = `${u.name} já tem ${SUMMON_FAMILIAR2.name} invocado.`;
+      sfxPlay.ui();
+      return;
+    }
     this.mode = "awaitSpell";
     this.spellKind = "summonFamiliar2";
     this.spellArmed = false;
     this.spellAim = null;
     this.hover = null;
-    this.tip = `${SUMMON_FAMILIAR2.name}: convoca um aliado maior, com ${Math.round(SUMMON_FAMILIAR2.statScale * 100)}% dos seus atributos atuais, até ${SUMMON_FAMILIAR2.range} hexes. Toque num espaço livre.`;
+    this.tip = `${SUMMON_FAMILIAR2.name}: convoca um aliado maior, com ${Math.round(SUMMON_FAMILIAR2.statScale * 100)}% dos seus atributos atuais, até ${SUMMON_FAMILIAR2.range} hexes. Pode lançar Míssil Mágico ou Dreno de Vida por conta própria. Toque num espaço livre.`;
+    sfxPlay.ui();
+  }
+
+  startSummonFamiliar3(): void {
+    const u = this.units.find((x) => x.id === this.selectedId);
+    if (!u || u.acted || this.tierRemaining(u, "summonFamiliar3") <= 0) return;
+    if (this.hasFamiliarOut(u, "familiar3")) {
+      this.tip = `${u.name} já tem ${SUMMON_FAMILIAR3.name} invocado.`;
+      sfxPlay.ui();
+      return;
+    }
+    this.mode = "awaitSpell";
+    this.spellKind = "summonFamiliar3";
+    this.spellArmed = false;
+    this.spellAim = null;
+    this.hover = null;
+    this.tip = `${SUMMON_FAMILIAR3.name}: convoca um aliado com ${Math.round(SUMMON_FAMILIAR3.statScale * 100)}% dos seus atributos atuais, até ${SUMMON_FAMILIAR3.range} hexes. Pode lançar Bola de Fogo por conta própria. Toque num espaço livre.`;
     sfxPlay.ui();
   }
 
@@ -3670,7 +3967,7 @@ export class BattleEngine {
     this.spellArmed = false;
     this.spellAim = null;
     this.hover = null;
-    this.tip = `${WEB_OF_DREAMS.name}: cria uma teia grudenta por ${WEB_OF_DREAMS.durationRounds} rodadas — quem estiver dentro fica com movimento reduzido a 1 hex, e testa ${Math.round(WEB_OF_DREAMS.sleepChance * 100)}% de chance de adormecer por ${diceFormula(WEB_OF_DREAMS.sleepDice, WEB_OF_DREAMS.sleepFaces, 0)} turnos a cada turno que permanecer lá dentro (cumulativo). Alcance ${WEB_OF_DREAMS.range}, raio ${webOfDreamsSize(u.level)}. Toque para mirar.`;
+    this.tip = `${WEB_OF_DREAMS.name}: cria uma teia grudenta por ${WEB_OF_DREAMS.durationRounds} rodadas — quem estiver dentro fica com movimento reduzido a 1 hex, e testa ${Math.round(webOfDreamsSleepChance(u.level) * 100)}% de chance de adormecer por ${diceFormula(WEB_OF_DREAMS.sleepDice, WEB_OF_DREAMS.sleepFaces, 0)} turnos a cada turno que permanecer lá dentro (cumulativo). Alcance ${WEB_OF_DREAMS.range}, raio ${webOfDreamsSize(u.level)}. Toque para mirar.`;
     sfxPlay.ui();
   }
 
@@ -3800,11 +4097,15 @@ export class BattleEngine {
       return;
     }
     if (this.spellKind === "summonFamiliar") {
-      this.castSummonFamiliar(u, cell, false);
+      this.castSummonFamiliar(u, cell, 1);
       return;
     }
     if (this.spellKind === "summonFamiliar2") {
-      this.castSummonFamiliar(u, cell, true);
+      this.castSummonFamiliar(u, cell, 2);
+      return;
+    }
+    if (this.spellKind === "summonFamiliar3") {
+      this.castSummonFamiliar(u, cell, 3);
       return;
     }
     if (this.spellKind === "webOfDreams") {
@@ -3821,6 +4122,14 @@ export class BattleEngine {
     }
     if (this.spellKind === "magicMissile") {
       this.castMagicMissile(u, cell);
+      return;
+    }
+    if (this.spellKind === "lifeDrain") {
+      this.castLifeDrain(u, cell);
+      return;
+    }
+    if (this.spellKind === "phantasmalForce") {
+      this.castPhantasmalForce(u, cell);
       return;
     }
     if (this.spellKind === "doubleStrike") {
@@ -3917,6 +4226,16 @@ export class BattleEngine {
     return this.webZones.some((z) => z.cells.has(key(x, y)));
   }
 
+  /** The sleep chance of whichever Dreaming Web zone covers (x,y) — set once at cast time
+   * from the caster's level (see castWebOfDreams/webOfDreamsSleepChance) and carried on the
+   * zone itself, so a lingering roll always uses the level that created the zone rather than
+   * whatever level some other unit is at now. Falls back to the base chance for a zone
+   * restored from an older save that predates this field. */
+  private webCellSleepChance(x: number, y: number): number {
+    const zone = this.webZones.find((z) => z.cells.has(key(x, y)));
+    return zone?.sleepChance ?? WEB_OF_DREAMS.sleepChance;
+  }
+
   /** Combined multiplier from every active Aura of Protection / Intimidating Presence zone
    * covering `defender`'s current cell — applied to the final damage of a hit right before it
    * comes off their HP, same insertion point as the sleepBonusDamage multiplier. Protection
@@ -3990,8 +4309,9 @@ export class BattleEngine {
   }
 
   /** Whether a unit is hidden from the player: any cell of its footprint in sight
-   * reveals the whole of it, so a big body never half-appears. */
-  private unitHidden(u: Unit): boolean {
+   * reveals the whole of it, so a big body never half-appears. Public because
+   * ThreeBattleRenderer needs this same fog-of-war gate for its own unit meshes. */
+  unitHidden(u: Unit): boolean {
     if (!this.fogged || u.side === "player") return false;
     return !footprint(u).some((p) => this.visible(p.x, p.y));
   }
@@ -4008,7 +4328,11 @@ export class BattleEngine {
    * had not spotted it yet would be a worse lie than not being able to shoot it.
    */
   private targetable(u: Unit | undefined): u is Unit {
-    if (!u || !attackableByPlayer(u)) return false;
+    if (!u || !u.alive || u.dialog) return false;
+    // debugFreeCast drops attackableByPlayer's ally/enemy filter (so a single-target spell
+    // can be aimed at your own party too) but the dialog-NPC exclusion above still always
+    // applies — a talk-only fixture unit still isn't a sane thing to fireball.
+    if (!this.debugFreeCast && !attackableByPlayer(u)) return false;
     return !this.unitHidden(u);
   }
 
@@ -4119,6 +4443,15 @@ export class BattleEngine {
     return hexDef(this.tiles, this.cols, x, y, this.decorOverlay);
   }
 
+  /** Real elevation for the Three renderer's terrain mesh — the same consolidated
+   * high-ground flag (painted `hill` terrain or a decoration's `yieldsHighGround` switch,
+   * see hexprops.ts) every combat/LOS rule already reads through hexAt, exposed read-only
+   * so terrain geometry can be generated FROM this gameplay data instead of a second,
+   * possibly-drifting copy of it. */
+  hexElevated(x: number, y: number): boolean {
+    return !!this.hexAt(x, y).height;
+  }
+
   /** Refold the decoration switches. Call after anything adds or removes a prop. */
   private refreshDecorOverlay(): void {
     this.decorOverlay = buildDecorOverlay(this.decorations, this.cols, this.rows, placedFootprint);
@@ -4222,18 +4555,32 @@ export class BattleEngine {
       if (!this.targetable(here) || manhattan(caster, cell) > MAGIC_MISSILE.range) return false;
       return clearShot(caster, cell, this.tiles, this.cols, "bolt", this.decorOverlay);
     }
-    if (this.spellKind === "summonFamiliar" || this.spellKind === "summonFamiliar2") {
-      const range = this.spellKind === "summonFamiliar2" ? SUMMON_FAMILIAR2.range : SUMMON_FAMILIAR.range;
+    if (this.spellKind === "phantasmalForce") {
+      const here = this.occ().get(key(cell.x, cell.y));
+      if (!this.targetable(here) || manhattan(caster, cell) > PHANTASMAL_FORCE.range) return false;
+      return clearShot(caster, cell, this.tiles, this.cols, "bolt", this.decorOverlay);
+    }
+    if (this.spellKind === "summonFamiliar" || this.spellKind === "summonFamiliar2" || this.spellKind === "summonFamiliar3") {
+      const range = this.spellKind === "summonFamiliar3" ? SUMMON_FAMILIAR3.range : this.spellKind === "summonFamiliar2" ? SUMMON_FAMILIAR2.range : SUMMON_FAMILIAR.range;
       if (manhattan(caster, cell) > range) return false;
-      if (!inBounds(cell.x, cell.y, this.cols, this.rows)) return false;
-      if (!this.hexAt(cell.x, cell.y).passable) return false;
-      return !this.occ().get(key(cell.x, cell.y));
+      // Familiar 3 is a real multi-hex creature (FOOTPRINT_TYPE_6) — every cell of the shape
+      // it would actually occupy has to be checked, not just the anchor tile, or it can be
+      // summoned half-overlapping a wall/unit/off-map edge (same class of bug computeReachable
+      // was fixed for — see footprintCost's comment in pathfinding.ts).
+      const cells = this.spellKind === "summonFamiliar3" ? footprint({ x: cell.x, y: cell.y, size: CLASSES.familiar3!.size, footprintOffsets: CLASSES.familiar3!.footprintOffsets }) : [cell];
+      const occ = this.occ();
+      for (const p of cells) {
+        if (!inBounds(p.x, p.y, this.cols, this.rows)) return false;
+        if (!this.hexAt(p.x, p.y).passable) return false;
+        if (occ.get(key(p.x, p.y))) return false;
+      }
+      return true;
     }
     if (this.spellKind === "webOfDreams") {
       if (manhattan(caster, cell) > WEB_OF_DREAMS.range) return false;
       return clearShot(caster, fireballOrigin(cell, this.cols, this.rows), this.tiles, this.cols, "bolt", this.decorOverlay);
     }
-    if (this.spellKind === "doubleStrike" || this.spellKind === "trip") {
+    if (this.spellKind === "doubleStrike" || this.spellKind === "trip" || this.spellKind === "lifeDrain") {
       const here = this.occ().get(key(cell.x, cell.y));
       return !!here && here.alive && here.side !== caster.side && canHitFrom(caster, caster, here, this.tiles, this.cols, this.decorOverlay);
     }
@@ -4329,14 +4676,18 @@ export class BattleEngine {
     if (manhattan(caster, cell) > range) return false;
     const occ = this.occ();
     const who = occ.get(key(cell.x, cell.y));
-    return !!who && who.side === "player" && who.alive && who.hp < who.maxHp;
+    if (!who || !who.alive) return false;
+    if (this.debugFreeCast) return true;
+    return who.side === "player" && who.hp < who.maxHp;
   }
 
   private validCureDiseaseTarget(caster: Unit, cell: Point): boolean {
     if (manhattan(caster, cell) > CURE_DISEASE.range) return false;
     const occ = this.occ();
     const who = occ.get(key(cell.x, cell.y));
-    return !!who && who.side === "player" && who.alive && (who.diseased || who.poisoned);
+    if (!who || !who.alive) return false;
+    if (this.debugFreeCast) return true;
+    return who.side === "player" && (who.diseased || who.poisoned);
   }
 
   private healRangeTiles(from: Point, range: number): Point[] {
@@ -4557,7 +4908,7 @@ export class BattleEngine {
 
     const shots = this.missileTargets;
     this.missileTargets = [];
-    this.spendTier(unit, "magicMissile");
+    this.spendFamiliarOrTier(unit, "magicMissile");
     this.spellKind = null;
     this.missileTargets = [];
     this.tip = null;
@@ -4671,26 +5022,111 @@ export class BattleEngine {
     });
   }
 
+  /** Familiar Maior's Dreno de Vida — routed through the same "spell" queue/stepSpell
+   * machinery as every other MAG-based cast (spellMul: 1, since its only power scaling is
+   * the level-scaled die from lifeDrainDice, not a flat multiplier like Fireball/Lightning's
+   * own). The heal-on-hit itself lands inside stepSpell's own lifeDrain branch, once the
+   * damage is known. */
+  private castLifeDrain(unit: Unit, cell: Point): void {
+    if (!this.spellAimValid(unit, cell)) {
+      this.tip = "Toque no inimigo.";
+      sfxPlay.ui();
+      return;
+    }
+    const occ = this.occ();
+    const foe = occ.get(key(cell.x, cell.y));
+    if (!foe) return;
+    unit.lifeDrainCharges = Math.max(0, (unit.lifeDrainCharges ?? 1) - 1);
+    this.spellKind = null;
+    this.missileTargets = [];
+    this.tip = null;
+    this.mode = "locked";
+    const dice = lifeDrainDice(unit.level);
+    this.queue.push({
+      type: "spell",
+      att: unit.id,
+      tiles: [cell],
+      ids: [foe.id],
+      dice: dice.dice,
+      faces: dice.faces,
+      bonus: 0,
+      label: LIFE_DRAIN.name,
+      spellMul: 1,
+      spellKind: "lifeDrain",
+    });
+  }
+
+  /** Conjurer tier 1's second spell — a long-range single hit, same MAG/spellMul:1/level-
+   * scaled-die shape as castLifeDrain above, just ranged (magicMissile's own FX/hit-timing;
+   * no dedicated art of its own yet) instead of melee. */
+  private castPhantasmalForce(unit: Unit, cell: Point): void {
+    if (!this.spellAimValid(unit, cell)) {
+      this.tip = "Alvo fora de alcance.";
+      sfxPlay.ui();
+      return;
+    }
+    const occ = this.occ();
+    const foe = occ.get(key(cell.x, cell.y));
+    if (!foe) return;
+    this.spendTier(unit, "phantasmalForce");
+    this.spellKind = null;
+    this.missileTargets = [];
+    this.tip = null;
+    this.mode = "locked";
+    const dice = phantasmalForceDice(unit.level);
+    this.queue.push({
+      type: "spell",
+      att: unit.id,
+      tiles: [cell],
+      ids: [foe.id],
+      dice: dice.dice,
+      faces: dice.faces,
+      bonus: 0,
+      label: PHANTASMAL_FORCE.name,
+      spellMul: 1,
+      spellKind: "phantasmalForce",
+    });
+  }
+
   /** Summon Familiar (Conjurer tier 1): spawns a new player-side unit directly into
    * `this.units` — no queued animation step, it just appears. It has no slot in this round's
    * `turnOrder` (that's rebuilt from `this.units` fresh every round in startNewRound), so it
    * waits for the round after this one to act, same as any other reinforcement would. */
-  /** Summon Familiar / Summon Familiar 2 (Conjurer tiers 1 and 2): `evolved` selects which of
-   * the two — same spawn logic, just a stronger creature/class/tier and its own spell/slot for
-   * Familiar 2, not an automatic upgrade of the first. See SUMMON_FAMILIAR2's note. */
-  private castSummonFamiliar(unit: Unit, cell: Point, evolved: boolean): void {
+  /** Summon Familiar / Summon Familiar 2 / Summon Familiar 3 (Conjurer tiers 1-3): `tier`
+   * selects which of the three — same spawn logic, just a stronger creature/class/tier and
+   * its own spell/slot per tier, never an automatic upgrade of the one before it. See
+   * SUMMON_FAMILIAR2/SUMMON_FAMILIAR3's notes. */
+  private castSummonFamiliar(unit: Unit, cell: Point, tier: 1 | 2 | 3): void {
     if (!this.spellAimValid(unit, cell)) {
       this.tip = "Escolha um espaço livre ao alcance.";
       sfxPlay.ui();
       return;
     }
-    const cls = evolved ? CLASSES.familiar2! : CLASSES.familiar!;
-    const scale = evolved ? SUMMON_FAMILIAR2.statScale : SUMMON_FAMILIAR.statScale;
+    const cls = tier === 3 ? CLASSES.familiar3! : tier === 2 ? CLASSES.familiar2! : CLASSES.familiar!;
+    // Re-checked here, not just in startSummonFamiliarX above — the authoritative gate, so
+    // the one-per-tier cap and tier 2's own level gate hold even if the awaitSpell state was
+    // ever entered some other way.
+    if (tier === 2 && unit.level < SUMMON_FAMILIAR2_UNLOCK_LEVEL) {
+      this.spellKind = null;
+      this.tip = `${SUMMON_FAMILIAR2.name} disponível a partir do nível ${SUMMON_FAMILIAR2_UNLOCK_LEVEL}.`;
+      sfxPlay.ui();
+      return;
+    }
+    if (this.hasFamiliarOut(unit, cls.id)) {
+      this.spellKind = null;
+      this.tip = `${unit.name} já tem ${cls.name} invocado.`;
+      sfxPlay.ui();
+      return;
+    }
+    const scale = tier === 3 ? SUMMON_FAMILIAR3.statScale : tier === 2 ? SUMMON_FAMILIAR2.statScale : SUMMON_FAMILIAR.statScale;
+    const spellKind: SpellKind = tier === 3 ? "summonFamiliar3" : tier === 2 ? "summonFamiliar2" : "summonFamiliar";
+    const spellName = tier === 3 ? SUMMON_FAMILIAR3.name : tier === 2 ? SUMMON_FAMILIAR2.name : SUMMON_FAMILIAR.name;
+    const namePrefix = tier === 3 ? "Familiar Titã de" : tier === 2 ? "Familiar Maior de" : "Familiar de";
     const maxHp = Math.max(1, Math.round(unit.maxHp * scale));
     const familiarInitiativeRoll = 1 + Math.floor(this.rng() * 20);
     const familiar: Unit = {
       id: `player-familiar-${this.units.length}`,
-      name: evolved ? `Familiar Maior de ${unit.name}` : `Familiar de ${unit.name}`,
+      name: `${namePrefix} ${unit.name}`,
       classId: cls.id,
       className: cls.name,
       role: cls.role,
@@ -4714,6 +5150,7 @@ export class BattleEngine {
       acted: false,
       facing: 1,
       walkPose: "front",
+      idleAlt: false,
       alive: true,
       drawX: cell.x,
       drawY: cell.y,
@@ -4738,6 +5175,9 @@ export class BattleEngine {
       footprintOffsets: cls.footprintOffsets,
       shock: null,
       shockCharges: 0,
+      spellCharges: tier === 3 ? familiarSpellCharges(unit.level) : familiarMagicMissileCharges(unit.level),
+      lifeDrainCharges: tier === 2 ? familiarLifeDrainCharges(unit.level) : undefined,
+      summonerId: unit.id,
       diseased: false,
       diseaseBase: null,
       poisoned: false,
@@ -4756,7 +5196,7 @@ export class BattleEngine {
       moveBudgetUsed: 0,
     };
     this.units.push(familiar);
-    this.spendTier(unit, evolved ? "summonFamiliar2" : "summonFamiliar");
+    this.spendTier(unit, spellKind);
     this.spellKind = null;
     this.missileTargets = [];
     this.emitPortalFx(cell.x, cell.y);
@@ -4770,8 +5210,8 @@ export class BattleEngine {
       att: unit.id,
       tiles: [cell],
       ids: [],
-      label: evolved ? SUMMON_FAMILIAR2.name : SUMMON_FAMILIAR.name,
-      spellKind: evolved ? "summonFamiliar2" : "summonFamiliar",
+      label: spellName,
+      spellKind,
     });
   }
 
@@ -4781,13 +5221,15 @@ export class BattleEngine {
       sfxPlay.ui();
       return;
     }
-    const cells = hexAreaTiles(click, webOfDreamsSize(unit.level), this.cols, this.rows);
+    const radius = webOfDreamsSize(unit.level);
+    const sleepChance = webOfDreamsSleepChance(unit.level);
+    const cells = hexAreaTiles(click, radius, this.cols, this.rows);
     const cellKeys = new Set(cells.map((p) => key(p.x, p.y)));
-    this.webZones.push({ cells: cellKeys, roundsLeft: WEB_OF_DREAMS.durationRounds, createdAt: this.time });
+    this.webZones.push({ cells: cellKeys, roundsLeft: WEB_OF_DREAMS.durationRounds, createdAt: this.time, center: { x: click.x, y: click.y }, radius, sleepChance });
     let asleepCount = 0;
     for (const u of this.units) {
       if (!u.alive || !cellKeys.has(key(u.x, u.y))) continue;
-      if (this.rng() < WEB_OF_DREAMS.sleepChance) {
+      if (this.rng() < sleepChance) {
         u.asleep = true;
         u.sleepTurns = rollDice(WEB_OF_DREAMS.sleepDice, WEB_OF_DREAMS.sleepFaces, 0, this.rng);
         asleepCount++;
@@ -5099,32 +5541,13 @@ export class BattleEngine {
     this.finishAction(actor);
   }
 
-  /** Ground a chest sits on — the neighboring floor, never the grass hex in chest001. */
-  private visualFloorAt(x: number, y: number): TerrainId {
-    const floor: TerrainId[] = ["nave", "plains", "ruins", "woods", "hill"];
-    const counts = new Map<TerrainId, number>();
-    for (const n of hexNeighbors(x, y)) {
-      if (!inBounds(n.x, n.y, this.cols, this.rows)) continue;
-      const t = tileAt(this.tiles, this.cols, n.x, n.y);
-      if (floor.includes(t)) counts.set(t, (counts.get(t) ?? 0) + 1);
-    }
-    if (counts.has("nave")) return "nave";
-    if (counts.size) {
-      return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]![0];
-    }
-    return this.tiles.includes("nave") ? "nave" : "plains";
-  }
-
-  /** First adjacent locked chest/door around a unit's own tile, or null if none.
-   *
-   * A hand-placed locked-chest prop stamps "chest" terrain (DECORATIONS.locked-chest.tile),
-   * same as a layout "k". The decoration check is the fallback for a map that still has
-   * the prop but never painted the hex — both are loot boxes and both spend a Gazua. */
+  /** First adjacent locked chest/door around a unit's own tile, or null if none. A chest is
+   * always a decoration (see CHEST_DECOR_IDS) — there is no "chest" terrain anymore — while a
+   * door is still real terrain (see the "door" TerrainId). */
   private adjacentLock(u: Unit): Point | null {
     for (const p of hexNeighbors(u.x, u.y)) {
       if (!inBounds(p.x, p.y, this.cols, this.rows)) continue;
-      const t = tileAt(this.tiles, this.cols, p.x, p.y);
-      if (t === "chest" || t === "door") return p;
+      if (tileAt(this.tiles, this.cols, p.x, p.y) === "door") return p;
       if (this.decorations.some((d) => CHEST_DECOR_IDS.has(d.id) && d.x === p.x && d.y === p.y)) return p;
     }
     return null;
@@ -5313,8 +5736,9 @@ export class BattleEngine {
     if (!target) return;
     const i = target.y * this.cols + target.x;
     const chestDecorId = this.decorations.find((dec) => CHEST_DECOR_IDS.has(dec.id) && dec.x === target.x && dec.y === target.y)?.id;
-    const wasChest = this.tiles[i] === "chest" || !!chestDecorId;
-    this.tiles[i] = this.visualFloorAt(target.x, target.y);
+    const wasChest = !!chestDecorId;
+    // A chest never touches `tiles` (see DECORATIONS.locked-chest's own comment) — the real
+    // floor is already sitting there, so opening it leaves it alone.
     this.terrainVersion++;
     // decorations is readonly (the renderer holds the same array), so drop the chest's
     // decoration in place rather than rebinding the field.
@@ -5346,7 +5770,7 @@ export class BattleEngine {
       // common case, rarer as potency climbs), and — a separate, independent roll — a
       // chance at a piece of gear, weighted so the strongest is the rarest and capped to
       // what this mission's own enemies are geared for (see highestEnemyLevel). Tier is
-      // Baú Pequeno/Médio/Grande, or "better" for a plain "chest" tile listed in
+      // small/medium/large by decoration id, or bumped to "better" for a small chest listed in
       // Mission.betterChests (gated behind a locked area, say) — same pool and range
       // throughout, just climbing odds and gear-tier headroom.
       const betterSpot = this.mission.betterChests?.some((c) => c.x === target.x && c.y === target.y) ?? false;
@@ -5475,6 +5899,9 @@ export class BattleEngine {
     const resumed = this.skipStartOfTurn;
     this.skipStartOfTurn = false;
     if (!resumed) {
+      // Flips once per this unit's own turn — see idleAlt's doc comment on Unit. A resumed
+      // turn (flee attempt failed, etc.) isn't a new turn, so it doesn't flip again.
+      u.idleAlt = !u.idleAlt;
       u.moveBudgetUsed = 0;
       this.startOfTurnEffects(u);
       if (!u.alive) {
@@ -5494,7 +5921,7 @@ export class BattleEngine {
       // sleepChance roll every turn you stay put, not just the one at cast — and a success
       // stacks another 1D4 onto whatever sleepTurns you're already carrying (even mid-nap)
       // rather than replacing it, so lingering in the web keeps digging the hole deeper.
-      if (this.isWebCell(u.x, u.y) && this.rng() < WEB_OF_DREAMS.sleepChance) {
+      if (this.isWebCell(u.x, u.y) && this.rng() < this.webCellSleepChance(u.x, u.y)) {
         const wasAsleep = u.asleep;
         const extra = rollDice(WEB_OF_DREAMS.sleepDice, WEB_OF_DREAMS.sleepFaces, 0, this.rng);
         u.asleep = true;
@@ -6209,7 +6636,7 @@ export class BattleEngine {
       const u = this.units.find((x) => x.alive && occupies(x, t.x, t.y));
       if (u && !ids.includes(u.id)) ids.push(u.id);
     }
-    this.spendTier(unit, "fireball");
+    this.spendFamiliarOrTier(unit, "fireball");
     this.spellKind = null;
     this.missileTargets = [];
     this.tip = null;
@@ -6285,6 +6712,18 @@ export class BattleEngine {
     const worldX = tile * sqrt3 * (col + 0.5 * (row & 1) + 0.5);
     const worldY = this.boardPad(tile) + tile * (1.5 * row + 1);
     return { x: cx, y: cy, tile, worldX, worldY };
+  }
+
+  /** Footprint (as a multiple of one hex's own tile size, the same unit SpawnOptions.radiusTiles
+   * already uses everywhere else) for ONE "web" WebGL effect drawn over an entire Dreaming Web
+   * zone — see BattleCanvas's zone sync. Neighboring hex centers on this grid sit sqrt(3) tiles
+   * apart (a regular hex grid — verified: dx=tile*sqrt3/2, dy=tile*1.5 gives the same
+   * hypot(dx,dy)=tile*sqrt3 to every one of the 6 neighbors, not just the horizontal pair), so a
+   * cube-distance-R hex disk's farthest cell sits R*sqrt(3) tiles out along its own spoke; + 1.0
+   * reaches that cell's own outer edge, matching DEFAULT_RADIUS_TILES.web's existing convention
+   * that 1.0 fills exactly one hex. */
+  webZoneRadiusTiles(radius: number): number {
+    return radius * Math.sqrt(3) + 1.0;
   }
 
   /** Live geometry for Dreaming Web's travelling WebGL shot — null whenever no such shot is
@@ -6427,6 +6866,29 @@ export class BattleEngine {
     if (cx > this.viewW - m) this.camX += cx - (this.viewW - m);
     if (cy > this.viewH - m) this.camY += cy - (this.viewH - m);
     this.clampCam();
+  }
+
+  /** Same job as ensureVisible, but for a whole spread of tiles at once — a Fireball/Caustic
+   * Venom blast, an enemy's cone or line spell, anything hitting more than one hex. A single
+   * ensureVisible(centroid) call still left a wide spread's outer edge off past the viewport
+   * (the centroid can sit comfortably in view while the blast's far corner doesn't); this pulls
+   * both the near and far corner of the affected area's bounding box in, one after the other —
+   * each call sees the camera position the previous one just left, so the two corners converge
+   * toward "as much of the whole spread fits as the viewport allows" rather than fighting each
+   * other. A spread wider than the viewport itself still can't fully fit — no amount of panning
+   * fixes that, only zooming out would — but every real spell's radius is well within one
+   * screen, so this covers the actual reported case (a wide blast landing partly off-frame). */
+  private ensureAreaVisible(tiles: readonly Point[]): void {
+    if (tiles.length === 0) return;
+    let minX = tiles[0]!.x, maxX = tiles[0]!.x, minY = tiles[0]!.y, maxY = tiles[0]!.y;
+    for (const t of tiles) {
+      if (t.x < minX) minX = t.x;
+      if (t.x > maxX) maxX = t.x;
+      if (t.y < minY) minY = t.y;
+      if (t.y > maxY) maxY = t.y;
+    }
+    this.ensureVisible(minX, minY);
+    this.ensureVisible(maxX, maxY);
   }
 
   private focusPlayers(): void {
@@ -6616,18 +7078,18 @@ export class BattleEngine {
       const art = facing.own ? (this.art.decorations[facing.file] ?? img) : img;
 
       if (facing.step === 0) {
-        ctx.drawImage(art, cx - w / 2, cy - h / 2 + dy, w, h);
+        ctx.drawImageLit(art, cx - w / 2, cy - h / 2 + dy, w, h);
       } else if (facing.own) {
         ctx.save();
         ctx.translate(cx, cy + dy);
         if (facing.mirror) ctx.scale(-1, 1);
-        ctx.drawImage(art, -w / 2, -h / 2, w, h);
+        ctx.drawImageLit(art, -w / 2, -h / 2, w, h);
         ctx.restore();
       } else {
         ctx.save();
         ctx.translate(cx, cy + dy);
         ctx.rotate((facing.step * Math.PI) / 3);
-        ctx.drawImage(art, -w / 2, -h / 2, w, h);
+        ctx.drawImageLit(art, -w / 2, -h / 2, w, h);
         ctx.restore();
       }
     }
@@ -6654,6 +7116,32 @@ export class BattleEngine {
     }
     const n = Math.max(1, cells.length);
     return { cx: cx / n, cy: cy / n };
+  }
+
+  /** World-space (camera-independent) equivalent of footprintCentroid — the same front-row
+   * average, in the same worldX/worldY terms effectAnchor already exposes for a single hex.
+   * Needed because effectAnchor only ever answers for one plain hex, which is wrong for a
+   * multi-hex boss (Troll, Horror, Asherah, ...): its sprite anchors on its footprint's front
+   * row, not the hex `col`/`row` happen to name — see footprintCentroid's own comment. */
+  private footprintCentroidWorld(
+    x: number,
+    y: number,
+    size: number,
+    footprintW?: number,
+    footprintOffsets?: { dx: number; dy: number }[],
+  ): { worldX: number; worldY: number } {
+    const cells =
+      size >= 4 || footprintOffsets ? footprintFrontRow({ x, y, footprintOffsets }, footprintW ?? 2) : footprint({ x, y, size });
+    const { tile } = this.layout;
+    const sqrt3 = Math.sqrt(3);
+    let wx = 0;
+    let wy = 0;
+    for (const p of cells) {
+      wx += tile * sqrt3 * (p.x + 0.5 * (p.y & 1) + 0.5);
+      wy += this.boardPad(tile) + tile * (1.5 * p.y + 1);
+    }
+    const n = Math.max(1, cells.length);
+    return { worldX: wx / n, worldY: wy / n };
   }
 
   /**
@@ -6700,6 +7188,27 @@ export class BattleEngine {
     return this.footprintCentroid(u.x, u.y, u.size, u.footprintW, u.footprintOffsets);
   }
 
+  /** Public, world-space (camera-independent) equivalent of the private unitPixel — the anchor
+   * position ThreeBattleRenderer needs for ANY unit, boss/multi-hex ones included, instead of
+   * the plain single-hex position effectAnchor(u.drawX, u.drawY) gives (wrong for a footprint
+   * that anchors on its front row — see footprintCentroidWorld). Mirrors unitPixel's own
+   * mid-move interpolation so a boss's sprite tracks the same eased position while walking that
+   * its combat hit box does. */
+  unitAnchor(u: Unit): { worldX: number; worldY: number } {
+    if (this.active && this.active.type === "move" && this.active.id === u.id) {
+      const a = this.active;
+      const from = a.path[a.i];
+      const to = a.path[a.i + 1];
+      if (from && to) {
+        const k = easeOut(Math.min(1, a.t / MOVE_STEP_DUR));
+        const A = this.footprintCentroidWorld(from.x, from.y, u.size, u.footprintW, u.footprintOffsets);
+        const B = this.footprintCentroidWorld(to.x, to.y, u.size, u.footprintW, u.footprintOffsets);
+        return { worldX: A.worldX + (B.worldX - A.worldX) * k, worldY: A.worldY + (B.worldY - A.worldY) * k };
+      }
+    }
+    return this.footprintCentroidWorld(u.x, u.y, u.size, u.footprintW, u.footprintOffsets);
+  }
+
   /** Walk-cycle frame for a unit mid-move, driven by how far along its path it actually is.
    *
    * Not by the global bob clock, which is what a walk cut got before and why none of them
@@ -6713,7 +7222,13 @@ export class BattleEngine {
     if (n <= 1 || !a || a.type !== "move" || a.id !== u.id) return 0;
     const dur = this.speedMode === "fast" ? 0.12 : this.speedMode === "slow" ? 0.36 : 0.22;
     const steps = a.i + Math.min(1, a.t / dur);
-    return Math.floor(steps * (n / 2) * (u.sprite === "conjurer" || u.sprite === "malrec" ? 0.9 : 1)) % n;
+    // A sheet's full loop used to always take exactly 2 hexes no matter its frame count, so a
+    // 36-frame sheet (Aldric, Malrec, Cultist V2, Kael Final, Conjurer, The Butcher) flipped
+    // through 3-6x more frames per hex than a 6-12 frame sheet and read as frantic next to
+    // them. Capping the frames-per-hex rate at what a 12-frame sheet already gets leaves every
+    // sheet at n<=12 untouched and only slows the oversized ones down to match its pace.
+    const framesPerHex = Math.min(n / 2, 6) * (u.sprite === "conjurer" || u.sprite === "malrec" ? 0.9 : 1);
+    return Math.floor(steps * framesPerHex) % n;
   }
 
   private idleFrame(u: Unit, n: number): number {
@@ -6730,7 +7245,7 @@ export class BattleEngine {
     const base =
       u.classId === "horror" || u.classId === "asherah" || u.classId === "troll" || u.classId === "ancientGolem"
         ? 2.0
-        : u.sprite === "kael" || u.sprite === "kaelEarly" || u.classId === "mage" || u.classId === "cultist" || u.classId === "cultistV2" || u.classId === "healer"
+        : u.sprite === "defaultWarrior" || u.sprite === "kaelEarly" || u.classId === "mage" || u.classId === "cultist" || u.classId === "cultistV2" || u.classId === "healer"
           ? 1.7
           : isBossClass(u.classId)
             ? 1.75
@@ -6781,10 +7296,14 @@ export class BattleEngine {
       const counter = a.stage.startsWith("counter");
       const actor = counter ? a.def : a.att;
       if (u.id !== actor) return null;
+      // Familiar 3's second, distinct attack cut (currently the only sprite with one) —
+      // Unit.idleAlt (the same once-per-turn flip Malrec's idles2 uses) alternates it in for
+      // its own attack stages, same idea as idles2 but for the swing instead of the stand.
+      const attackPool = u.idleAlt ? (this.art.attacks2[u.sprite] ?? this.art.attacks[u.sprite]) : this.art.attacks[u.sprite];
       // A dedicated counter pose (currently just theButcher's counter-*.png) for the
       // defender's stages only — falls back to the same attacks cut every sprite without
       // one already used for countering, same as before this existed.
-      const frames = (counter ? this.art.counters[u.sprite] : undefined) ?? this.art.attacks[u.sprite];
+      const frames = (counter ? this.art.counters[u.sprite] : undefined) ?? attackPool;
       if (!frames || frames.length < 4) return null;
       const n = frames.length;
       const long = n >= 12;
@@ -6842,13 +7361,162 @@ export class BattleEngine {
       };
     }
     const heavy = u.size >= 4 ? 1.4 : u.size === 2 ? 1.12 : 1;
-    if (u.sprite === "kael" || u.sprite === "kaelEarly" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "conjurer" || u.sprite === "malrec" || u.size >= 4) {
+    if (u.sprite === "defaultWarrior" || u.sprite === "kaelEarly" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "conjurer" || u.sprite === "malrec" || u.size >= 4) {
       return { bob: 0, sway: 0, breath: 0 };
     }
     const bob = Math.sin(t * 1.55) * (1.15 * heavy);
     const sway = Math.sin(t * 0.85 + 0.3) * (cell * 0.008 * heavy);
     const breath = 0.012 + Math.sin(t * 1.55) * 0.014;
     return { bob, sway, breath };
+  }
+
+  /** Every property of a unit's current animated pose — pose selection (idle/walk/atk/cast/
+   * counter), the size/scale corrections tied to whichever pose that turns out to be, and the
+   * live idle-motion (bob/sway/breath) and high-ground lift on top — computed once here so
+   * renderUnitsAndOverlays and ThreeBattleRenderer (via the public unitVisual() wrapper below)
+   * can never drift apart into two separate copies of this logic. Ported verbatim from what
+   * used to be inlined in renderUnitsAndOverlays's own per-unit loop; see that method's history
+   * for the reasoning behind each individual correction. */
+  private computeUnitVisual(u: Unit, cell: number, tile: number): UnitVisual {
+    const s = unitSize(u);
+    const boss = isBossClass(u.classId);
+    const { bob, sway, breath } = this.liveMotion(u, cell);
+    const lift = this.unitLift(u, cell);
+    const atk = this.attackPose(u);
+    const moving = this.active?.type === "move" && this.active.id === u.id;
+    // idleAlt flips once per this unit's own turn (see beginUnitTurn) — a sprite with a
+    // second idle loop (currently just Malrec's idles2) alternates into it; everyone else
+    // has no idles2 entry, so this is a no-op fallback to their regular idle/stand pool.
+    const idlePool = u.idleAlt ? (this.art.idles2[u.sprite] ?? this.art.idles[u.sprite]) : this.art.idles[u.sprite];
+    const idle = !atk && !moving ? idlePool : undefined;
+    // While moving, a sprite that has a walk cut plays it; one that doesn't falls back to
+    // its idle loop, which idleFrame already runs faster for a moving unit.
+    const faceRight = u.facing === 1;
+    // Lancer's authored move/move-left cuts read backwards against their own facing
+    // (moving right visibly played the left-facing footage and vice versa) — swap which
+    // pool answers which facing, walk only, per direct report. Cultist V2's own walk
+    // "backwards" complaint has a different cause: see dirActionWalk below.
+    const useWalkLeft = u.sprite === "lancer" ? faceRight : !faceRight;
+    const walkPool = useWalkLeft ? (this.art.walksLeft[u.sprite] ?? this.art.walks[u.sprite]) : this.art.walks[u.sprite];
+    // Same idleAlt alternation attackPose applies to pick its index (see that function's
+    // attackPool) — mirrored here so the frame actually drawn comes from the same array.
+    const atkBase = u.idleAlt ? (this.art.attacks2[u.sprite] ?? this.art.attacks[u.sprite]) : this.art.attacks[u.sprite];
+    const atkPool = faceRight ? atkBase : (this.art.attacksLeft[u.sprite] ?? atkBase);
+    const walk = atk == null && moving ? walkPool : undefined;
+    // attackPose computes its index against whichever pool it picked (casts for a spell/heal
+    // cast, counters for the defender's own counter stages, attacks otherwise), so this has
+    // to mirror that same choice or the index lands in the wrong array.
+    const casting = this.active && (this.active.type === "spell" || this.active.type === "heal") && this.active.att === u.id;
+    const castPool = faceRight ? this.art.casts[u.sprite] : (this.art.castsLeft[u.sprite] ?? this.art.casts[u.sprite]);
+    const countering = this.active?.type === "combat" && this.active.stage.startsWith("counter") && this.active.def === u.id;
+    const counterPool = faceRight ? this.art.counters[u.sprite] : (this.art.countersLeft[u.sprite] ?? this.art.counters[u.sprite]);
+    const frames = atk != null ? (casting ? (castPool ?? atkPool) : countering ? (counterPool ?? atkPool) : atkPool) : walk ?? idle ?? this.art.sprites[u.sprite];
+    const n = frames?.length ?? 0;
+    const fi = atk != null ? atk : walk ? this.walkFrame(u, n) : this.idleFrame(u, n || 4);
+    const walkDirs = moving ? this.art.walkDirs[u.sprite] : undefined;
+    const img = (walkDirs ? walkDirs[u.walkPose] : undefined) ?? frames?.[fi] ?? frames?.[0];
+    // The draw-size correction keys off the footprint SHAPE (reference equality against
+    // FOOTPRINT_TYPE_8 or FOOTPRINT_TYPE_7), not a hardcoded classId — every big creature
+    // (Troll, Asherah, Horror, and any future one on either shape) gets the same default
+    // correction automatically, rather than needing its own one-off case added here.
+    // Depends on that creature's own sprite frames being cropped to roughly the same
+    // canvas-fill ratio as the others — this correction assumes that, it doesn't measure it.
+    const isBigCreatureFootprint = u.footprintOffsets === FOOTPRINT_TYPE_8 || u.footprintOffsets === FOOTPRINT_TYPE_7;
+    const isLancer = u.classId === "lancer" || u.sprite === "lancer" || u.sprite === "defaultLancer";
+    const isSandoval = u.classId === "sandoval" || u.sprite === "sandoval";
+    const isFamiliar = u.classId === "familiar" || u.sprite === "familiar";
+    const isKaelFinal = u.sprite === "kaelFinal";
+    const isCultistV2 = u.classId === "cultistV2" || u.sprite === "cultist-v2";
+    const spriteScale = isLancer ? 1.4 : isSandoval ? 1.2 : isFamiliar ? 0.5 : isKaelFinal ? 0.9 : isCultistV2 ? 0.98 : 1;
+    const familiar2WidthMul = u.sprite === "familiar2" ? 2.544 : 1;
+    const familiar2WalkScale = u.sprite === "familiar2" && walk ? 0.97 : 1;
+    const isCultistV2Casting = isCultistV2 && casting;
+    const cultistV2CastHeightMul = isCultistV2Casting ? 1.24 : 1;
+    const cultistV2CastWidthMul = isCultistV2Casting ? 1.06 : 1;
+    const isCultistV2Attacking = isCultistV2 && atk != null && !isCultistV2Casting;
+    const cultistV2AtkScale = isCultistV2Attacking ? 1.13 : 1;
+    const malrecWalkHeightScale = u.sprite === "malrec" && walk ? 0.948 : 1;
+    const malrecWalkWidthScale = u.sprite === "malrec" && walk ? 0.689 : 1;
+    const isMalrecAttacking = u.sprite === "malrec" && atk != null && !casting;
+    const malrecAtkScale = isMalrecAttacking ? 1.113 : 1;
+    const isMalrecAtkFrame27 = isMalrecAttacking && fi === 26;
+    const malrecAtkFrame27WidthScale = isMalrecAtkFrame27 ? 1.49 : 1;
+    const cultistV2WalkScale = isCultistV2 && walk ? 1.02 : 1;
+    const familiar3Scale = u.classId === "familiar3" ? 1.4 : 1;
+    const h =
+      cell *
+      (s >= 4 ? 3.35 : s === 2 ? 1.72 : boss ? 1.44 : 1.42) *
+      1.2 *
+      (isBigCreatureFootprint ? 0.75 : 1) *
+      spriteScale *
+      cultistV2CastHeightMul *
+      cultistV2AtkScale *
+      malrecWalkHeightScale *
+      malrecAtkScale *
+      cultistV2WalkScale *
+      familiar3Scale *
+      familiar2WalkScale;
+    const w =
+      cell *
+      (s >= 4 ? 2.85 : s === 2 ? 1.85 : boss ? 1.12 : 1.11) *
+      1.2 *
+      (isBigCreatureFootprint ? 0.75 : 1) *
+      spriteScale *
+      familiar2WidthMul *
+      familiar2WalkScale *
+      cultistV2CastWidthMul *
+      cultistV2AtkScale *
+      malrecWalkWidthScale *
+      malrecAtkScale *
+      malrecAtkFrame27WidthScale *
+      cultistV2WalkScale *
+      familiar3Scale;
+    // The cast cut's own content also sits higher inside its canvas than idle/attack's does
+    // (feet reach only ~87% of the way down vs idle's ~99%) — without this, boosting h above
+    // would float the feet even further off the ground than they already subtly are. Shifts
+    // the whole draw down by that measured gap so the feet land back on the anchor point.
+    const footOffset = isCultistV2Casting ? h * 0.127 : 0;
+    // Big creatures plant their feet at the bottom corner of their front hex (tile * 0.9,
+    // matching the hex outline radius used elsewhere) instead of the smaller offset tuned
+    // for normal-size sprites, so the feet don't float above the tile they stand on.
+    const footY = s >= 4 ? tile * 0.9 : cell * 0.42;
+    // Dedicated left/right walk+attack cuts already face the enemy, so flipping
+    // them would put the spear/staff on the wrong side. Idle still flips.
+    const dirActionWalk = (u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "theButcher" || u.sprite === "familiar2" || u.sprite === "cultist-v2") && moving;
+    const dirActionAttack = (u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval") && atk != null;
+    const dirAction = dirActionWalk || dirActionAttack;
+    // The familiar's art is drawn facing left by default — the opposite of every other
+    // sprite's "facing 1 shows the sheet as drawn" convention — so its mirror has to run
+    // backwards from u.facing or it walks left while visually facing right and vice versa.
+    // defaultWarrior's kael-v2 stand cut was shot facing left but its atk-*.png cut was shot
+    // facing right — see the identical comment this replaced in renderUnitsAndOverlays for
+    // the full reasoning on both of these.
+    const defaultWarriorIdleOrWalkReversed = u.sprite === "defaultWarrior" && atk == null;
+    const facing = u.classId === "familiar" || defaultWarriorIdleOrWalkReversed ? -u.facing : u.facing;
+    const flip = dirAction ? 1 : facing;
+    // A fixed set of sprites skip the breath squash/stretch entirely (ctx.scale(flip, 1)) —
+    // see the identical branch this replaced in renderUnitsAndOverlays.
+    const noBreathScale =
+      u.sprite === "defaultWarrior" ||
+      u.sprite === "kaelEarly" ||
+      u.sprite === "aldric" ||
+      u.sprite === "defaultLancer" ||
+      u.sprite === "lancer" ||
+      u.sprite === "sandoval" ||
+      u.sprite === "conjurer" ||
+      u.sprite === "malrec";
+    const scaleX = noBreathScale ? flip : flip * (1 - breath * 0.22);
+    const scaleY = noBreathScale ? 1 : 1 + breath;
+    return { img, w, h, footY, bob, sway, breath, lift, scaleX, scaleY, footOffset };
+  }
+
+  /** Public wrapper around computeUnitVisual — ThreeBattleRenderer calls this every frame to
+   * animate its own unit meshes (walk/attack/cast/counter poses, live idle motion) instead of
+   * only ever showing a static idle frame, using the exact same pose/size logic
+   * renderUnitsAndOverlays draws with on the Canvas2D-shim canvas. `tile` is the same
+   * `ZOOM_RADII[this.zoom]` value render()/renderUnitsAndOverlays already key off. */
+  unitVisual(u: Unit, tile: number): UnitVisual {
+    return this.computeUnitVisual(u, tile * Math.sqrt(3), tile);
   }
 
   /** Persistent visual-code status FX: it tracks a unit, loops with engine time,
@@ -6926,13 +7594,18 @@ export class BattleEngine {
   /** Tiles, decorations, terrain-rule overlays (walk/attack/spell range highlights, the
    * active-turn glow, the hover cursor) — everything at or below "ground level". Opens this
    * frame's screen-shake transform but does not close it here (see renderUnitsAndOverlays). */
-  renderGround(ctx: any, cssW: number, cssH: number, dpr: number): void {
+  /** Advances camera/visibility bookkeeping for this frame WITHOUT drawing anything — the
+   * non-drawing prefix renderGround always ran, factored out so an alternate renderer (see
+   * gfx/three/ThreeBattleRenderer.ts) can keep `layout`/visibility/camera state in sync without
+   * going through the Canvas2D-shim draw path. renderGround calls this too, so its own
+   * behavior is byte-for-byte unchanged. Returns the current zoom level's tile size, since
+   * every caller needs it right after anyway. */
+  updateCameraLayout(cssW: number, cssH: number): number {
     // Cheap no-op unless the party moved since the last frame — see refreshVisibility.
     // Sitting here means anything drawn, and anything the HUD reads off this engine,
     // is deciding against current sight rather than last turn's.
     this.refreshVisibility();
     const tile = ZOOM_RADII[this.zoom]!;
-    const { w: boardW, h: boardH } = this.boardSize(tile);
     this.viewW = cssW;
     this.viewH = cssH;
     if (!this.camReady) {
@@ -6946,6 +7619,25 @@ export class BattleEngine {
     const ox = -this.camX;
     const oy = -this.camY;
     this.layout = { ox, oy, tile, cols: this.cols, rows: this.rows };
+    // Rolled once per frame here (not inside renderGround) so it still applies under
+    // ThreeBattleRenderer, which calls this but never calls renderGround — renderGround and
+    // renderUnitsAndOverlays both just read frameShakeDx/Dy now instead of one of them owning
+    // the randomization the other silently depended on.
+    const shake = this.reducedMotion ? 0 : this.trauma * this.trauma;
+    if (shake) {
+      this.frameShakeDx = (Math.random() - 0.5) * 10 * shake;
+      this.frameShakeDy = (Math.random() - 0.5) * 10 * shake;
+    } else {
+      this.frameShakeDx = 0;
+      this.frameShakeDy = 0;
+    }
+    return tile;
+  }
+
+  renderGround(ctx: any, cssW: number, cssH: number, dpr: number): void {
+    const tile = this.updateCameraLayout(cssW, cssH);
+    const { w: boardW, h: boardH } = this.boardSize(tile);
+    const { ox, oy } = this.layout;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
@@ -6970,15 +7662,11 @@ export class BattleEngine {
       ctx.fillRect(0, 0, cssW, cssH);
     }
 
-    const shake = this.reducedMotion ? 0 : this.trauma * this.trauma;
+    // Randomized once per frame in updateCameraLayout now, not here — see its own comment.
+    const shake = this.frameShakeDx !== 0 || this.frameShakeDy !== 0;
     if (shake) {
-      this.frameShakeDx = (Math.random() - 0.5) * 10 * shake;
-      this.frameShakeDy = (Math.random() - 0.5) * 10 * shake;
       ctx.save();
       ctx.translate(this.frameShakeDx, this.frameShakeDy);
-    } else {
-      this.frameShakeDx = 0;
-      this.frameShakeDy = 0;
     }
 
     for (let y = 0; y < this.rows; y++) {
@@ -6988,8 +7676,7 @@ export class BattleEngine {
         // Never seen: draw nothing at all. Cheaper than the clipped path below, which is
         // why fog makes a big fogged board lighter to draw rather than heavier.
         if (!this.explored(x, y)) continue;
-        const id = tileAt(this.tiles, this.cols, x, y);
-        const drawId = id === "chest" ? this.visualFloorAt(x, y) : id;
+        const drawId = tileAt(this.tiles, this.cols, x, y);
         const isWaterFx = this.waterFxTileKeys.has(y * this.cols + x);
         ctx.save();
         this.hexPath(ctx, cx, cy, tile * 1.0);
@@ -7026,28 +7713,76 @@ export class BattleEngine {
       }
     }
 
-    // Dreaming Web's persistent floor patch is the WebGL "web" element (see BattleCanvas's
-    // live webZones sync), which sits on the ground layer between this canvas and the units
-    // canvas — no 2D drawing of it belongs here.
+    // Dreaming Web's persistent floor patch: a real alpha-cutout spiderweb photo (GameArt.
+    // webfloor) stamped on every hex a live zone covers — replaces the old procedural WebGL
+    // "web" shader quad, whose own glow doubled up with the movement-range highlight's glow
+    // right after casting it (see overlay()'s glow: false for web cells below) and read as an
+    // odd bright pop rather than something actually sitting on the ground. Gated per-hex, not
+    // per-zone: a real stamped image has nothing to gain from withholding the whole zone until
+    // every one of its cells is explored the way the old single full-footprint quad did — each
+    // hex reveals its own web the moment that hex itself is explored. Still withheld until
+    // WEB_SHOT_TRAVEL elapses since the zone's own createdAt, so it shows up exactly when the
+    // travelling shot (see BattleCanvas's webShot sync) actually lands rather than popping in
+    // the instant the spell is cast.
+    for (const zone of this.webZones) {
+      if (zone.createdAt != null && this.time < zone.createdAt + WEB_SHOT_TRAVEL) continue;
+      for (const k of zone.cells) {
+        const comma = k.indexOf(",");
+        const wx = Number(k.slice(0, comma));
+        const wy = Number(k.slice(comma + 1));
+        if (!Number.isFinite(wx) || !Number.isFinite(wy) || !this.explored(wx, wy)) continue;
+        const { cx, cy } = this.hexCenter(wx, wy);
+        if (cx < -tile * 2 || cy < -tile * 2 || cx > cssW + tile * 2 || cy > cssH + tile * 2) continue;
+        ctx.save();
+        this.hexPath(ctx, cx, cy, tile * 1.0);
+        ctx.clip();
+        if (!this.visible(wx, wy)) ctx.globalAlpha = 0.38;
+        ctx.drawImage(this.art.webfloor, cx - tile, cy - tile, tile * 2, tile * 2);
+        ctx.restore();
+      }
+    }
+    if (shake) ctx.restore();
     // Ground/behind decorations are drawn in renderUnitsAndOverlays instead of here, so they
     // land on the units canvas — stacked above the WebGL elemental FX canvas sitting in
     // between this canvas and that one (see BattleCanvas) — rather than being hidden under it.
 
+    // Walkable/attack/spell-range highlights and the active-turn glow: split into their own
+    // method (see renderBoardOverlays) so ThreeBattleRenderer — which replaces this function
+    // entirely rather than calling it — can still draw them onto its own overlay canvas. Own
+    // shake save/translate/restore pair in there rather than sharing this function's (already
+    // closed above), so it renders identically whichever caller reaches it.
+    this.renderBoardOverlays(ctx, cssW, cssH);
+  }
+
+  /** Canvas2D drawing for the movement/attack/spell-range highlight + active-turn ring — used
+   * by the legacy `?renderer=legacy` path only (via renderGround's call site below). Split out
+   * of renderGround as its own method because it used to be that function's inlined tail end,
+   * and the actual cell/color decisions now live in boardOverlayLayers/activeTurnHighlight so
+   * ThreeBattleRenderer can render the same highlight as real world-space geometry instead
+   * (see ThreeBattleRenderer.syncOverlay) — this method is just the Canvas2D fill+glow+stroke
+   * treatment on top of that shared data. */
+  renderBoardOverlays(ctx: any, cssW: number, cssH: number): void {
+    const { tile } = this.layout;
+    const shake = this.frameShakeDx !== 0 || this.frameShakeDy !== 0;
+    if (shake) {
+      ctx.save();
+      ctx.translate(this.frameShakeDx, this.frameShakeDy);
+    }
     // Every selectable area (walkable ground, spell range, an aimed AoE) gets the same
     // treatment: a soft colored glow plus a bright rim, on top of the flat fill — the flat
     // fill alone reads as a dim tint on some terrain art and is easy to miss. The glow
     // breathes (same sine pulse as the active-turn-unit ring above) rather than sitting
     // static, the classic tactics-RPG "selectable tile" look.
     const glowPulse = this.reducedMotion ? 1 : 0.72 + Math.sin(this.time * 3.2) * 0.28;
-    const overlay = (cells: Iterable<Point>, fill: string) => {
+    const drawLayer = (cells: Point[], fill: string, glow: boolean) => {
       const rgb = /rgba?\(([^),]+),([^),]+),([^),]+)/.exec(fill);
       const [r, g, b] = rgb ? [rgb[1]!.trim(), rgb[2]!.trim(), rgb[3]!.trim()] : ["255", "255", "255"];
       ctx.save();
-      ctx.shadowColor = `rgba(${r},${g},${b},${(0.95 * glowPulse).toFixed(3)})`;
-      ctx.shadowBlur = tile * (0.4 + 0.42 * glowPulse);
+      ctx.shadowColor = glow ? `rgba(${r},${g},${b},${(0.95 * glowPulse).toFixed(3)})` : "transparent";
+      ctx.shadowBlur = glow ? tile * (0.4 + 0.42 * glowPulse) : 0;
       ctx.fillStyle = fill;
-      ctx.strokeStyle = `rgba(${r},${g},${b},${Math.min(1, 0.8 + 0.2 * glowPulse).toFixed(3)})`;
-      ctx.lineWidth = Math.max(1.8, tile * (0.06 + 0.035 * glowPulse));
+      ctx.strokeStyle = glow ? `rgba(${r},${g},${b},${Math.min(1, 0.8 + 0.2 * glowPulse).toFixed(3)})` : `rgba(${r},${g},${b},0.6)`;
+      ctx.lineWidth = glow ? Math.max(1.8, tile * (0.06 + 0.035 * glowPulse)) : 1.4;
       for (const c of cells) {
         const { cx, cy } = this.hexCenter(c.x, c.y);
         this.hexPath(ctx, cx, cy, tile * 0.92);
@@ -7056,165 +7791,33 @@ export class BattleEngine {
       }
       ctx.restore();
     };
-
-    for (const zone of this.auraZones) {
-      const cells = [...zone.cells].map((k) => {
-        const [x, y] = k.split(",").map(Number);
-        return { x: x!, y: y! };
-      });
-      overlay(cells, zone.kind === "protection" ? "rgba(150,210,255,0.3)" : "rgba(220,90,70,0.3)");
-    }
-
-    if (this.mode === "idle" && this.threat.length) overlay(this.threat, "rgba(220,120,90,0.5)");
-
-    if (this.mode === "awaitPotion") {
-      const selected = this.units.find((u) => u.id === this.selectedId);
-      if (selected) {
-        const range = [{ x: selected.x, y: selected.y }, ...hexNeighbors(selected.x, selected.y)].filter((c) =>
-          this.validPotionTarget(selected, c),
-        );
-        overlay(range, "rgba(150,210,170,0.45)");
-        const cell = this.hover;
-        if (cell && this.validPotionTarget(selected, cell)) overlay([cell], "rgba(170,230,180,0.55)");
-      }
-    }
-
-    if (this.mode === "awaitSpell") {
-      const selected = this.units.find((u) => u.id === this.selectedId);
-      if (selected && this.spellKind === "fireball") {
-        overlay(fireballRangeTiles(selected, this.cols, this.rows), "rgba(235,140,70,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && manhattan(selected, cell) <= FIREBALL.range) {
-          overlay(fireballTiles(fireballOrigin(cell, this.cols, this.rows), this.cols, this.rows), "rgba(235,140,70,0.55)");
-        }
-      } else if (selected && this.spellKind === "causticVenom") {
-        overlay(this.healRangeTiles(selected, CAUSTIC_VENOM.range), "rgba(200,210,90,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && manhattan(selected, cell) <= CAUSTIC_VENOM.range) {
-          overlay(hexAreaTiles(fireballOrigin(cell, this.cols, this.rows), CAUSTIC_VENOM.size, this.cols, this.rows), "rgba(200,210,90,0.55)");
-        }
-      } else if (selected && this.spellKind === "sweep") {
-        overlay(this.sweepTiles(selected), "rgba(220,150,70,0.5)");
-      } else if (selected && this.spellKind === "longShot") {
-        const reach: Point[] = [];
-        const max = this.longMax(selected);
-        for (let y = 0; y < this.rows; y++) {
-          for (let x = 0; x < this.cols; x++) {
-            const d = manhattan(selected, { x, y });
-            if (d >= selected.minRange && d <= max) reach.push({ x, y });
-          }
-        }
-        overlay(reach, "rgba(210,190,90,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(230,200,100,0.55)");
-      } else if (selected && this.spellKind === "piercing") {
-        overlay(allAxisRays(selected, this.cols, this.rows), "rgba(220,160,70,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        const line = cell ? this.piercingRay(selected, cell) : null;
-        if (line) overlay(line, "rgba(235,170,80,0.55)");
-      } else if (selected && this.spellKind === "piercingThrust") {
-        overlay(this.healRangeTiles(selected, selected.maxRange + 1), "rgba(220,160,80,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        const line = cell ? this.piercingThrustRay(selected, cell) : null;
-        if (line) overlay(line, "rgba(235,175,90,0.55)");
-      } else if (selected && (this.spellKind === "doubleStrike" || this.spellKind === "trip")) {
-        overlay(this.healRangeTiles(selected, selected.maxRange), "rgba(220,120,80,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(235,120,80,0.55)");
-      } else if (selected && this.spellKind === "cleave") {
-        overlay(hexNeighbors(selected.x, selected.y), "rgba(220,120,80,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        const arc = cell ? cleaveHexes(selected, cell, CLEAVE.hexes, this.cols, this.rows) : [];
-        if (arc.length) overlay(arc, "rgba(235,120,80,0.55)");
-      } else if (selected && this.spellKind === "summonFamiliar") {
-        overlay(this.healRangeTiles(selected, SUMMON_FAMILIAR.range), "rgba(180,150,235,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(200,170,245,0.55)");
-      } else if (selected && this.spellKind === "summonFamiliar2") {
-        overlay(this.healRangeTiles(selected, SUMMON_FAMILIAR2.range), "rgba(180,150,235,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(200,170,245,0.55)");
-      } else if (selected && this.spellKind === "webOfDreams") {
-        overlay(this.healRangeTiles(selected, WEB_OF_DREAMS.range), "rgba(170,140,230,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && manhattan(selected, cell) <= WEB_OF_DREAMS.range) {
-          overlay(hexAreaTiles(cell, webOfDreamsSize(selected.level), this.cols, this.rows), "rgba(185,155,240,0.55)");
-        }
-      } else if (selected && this.spellKind === "lightning") {
-        overlay(this.healRangeTiles(selected, LIGHTNING.range), "rgba(140,200,245,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(160,215,255,0.55)");
-      } else if (selected && this.spellKind === "lightningTier3") {
-        overlay(this.healRangeTiles(selected, LIGHTNING_T3.range), "rgba(120,210,255,0.5)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(180,235,255,0.65)");
-      } else if (selected && this.spellKind === "magicMissile") {
-        overlay(this.healRangeTiles(selected, MAGIC_MISSILE.range), "rgba(180,150,235,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(200,170,245,0.55)");
-      } else if (selected && this.isHeal(this.spellKind)) {
-        overlay(this.healRangeTiles(selected, CURES[this.spellKind].range), "rgba(150,210,170,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.validHealTarget(selected, cell)) overlay([cell], "rgba(170,230,180,0.55)");
-      } else if (selected && this.spellKind === "cureDisease") {
-        overlay(this.healRangeTiles(selected, CURE_DISEASE.range), "rgba(150,210,170,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.validCureDiseaseTarget(selected, cell)) overlay([cell], "rgba(170,230,180,0.55)");
-      } else if (selected && this.spellKind === "multiShot") {
-        overlay(this.healRangeTiles(selected, selected.maxRange + MULTI_SHOT.rangeBonus), "rgba(210,190,90,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        if (cell && this.spellAimValid(selected, cell)) overlay([cell], "rgba(230,200,100,0.55)");
-      } else if (selected && this.spellKind === "divineWrath") {
-        overlay(this.healRangeTiles(selected, DIVINE_WRATH.range), "rgba(255,225,140,0.4)");
-        const cell = this.hover ?? this.spellAim;
-        const line = cell ? this.wrathRay(selected, cell, DIVINE_WRATH.range) : null;
-        if (line) overlay(line, "rgba(255,225,140,0.6)");
-      } else if (selected && this.spellKind === "shoulderSmash") {
-        overlay(hexNeighbors(selected.x, selected.y), "rgba(220,120,80,0.45)");
-        const cell = this.hover ?? this.spellAim;
-        const arc = cell ? cleaveHexes(selected, cell, shoulderSmashPower(selected.level).hexes, this.cols, this.rows) : [];
-        if (arc.length) overlay(arc, "rgba(235,120,80,0.55)");
-      } else if (selected && this.spellKind === "stampede") {
-        overlay(this.healRangeTiles(selected, STAMPEDE.range), "rgba(200,90,60,0.4)");
-        const cell = this.hover ?? this.spellAim;
-        const line = cell ? this.wrathRay(selected, cell, STAMPEDE.range) : null;
-        if (line) overlay(line, "rgba(200,90,60,0.6)");
-      }
-    }
-
-    if (this.mode === "selected" || this.mode === "awaitAttack" || this.mode === "awaitAction") {
-      if (this.mode === "selected") overlay(this.reach.values(), "rgba(140,200,245,0.5)");
-      const selected = this.units.find((u) => u.id === this.selectedId);
-      const atkTiles: Point[] = [];
-      for (const foe of this.units) {
-        if (!foe.alive || foe.side === "player") continue;
-        if (this.mode === "selected" && this.attackFrom.has(foe.id)) atkTiles.push(...footprint(foe));
-        if ((this.mode === "awaitAttack" || this.mode === "awaitAction") && selected && canHitFrom(selected, selected, foe, this.tiles, this.cols, this.decorOverlay)) {
-          atkTiles.push(...footprint(foe));
-        }
-      }
-      overlay(atkTiles, "rgba(230,120,85,0.55)");
-      if (this.pendingFoeId) {
-        const foe = this.units.find((u) => u.id === this.pendingFoeId);
-        if (foe) overlay(footprint(foe), "rgba(245,95,65,0.6)");
-      }
-    }
+    // Which cells are highlighted, and in what color, is decided once in boardOverlayLayers —
+    // shared with ThreeBattleRenderer, which turns each layer into a real world-space hex mesh
+    // ordered between terrain and decorations, instead of a Canvas2D fill — so the cell/color
+    // logic (the mode/spell switch that used to live inline here) can never drift between the
+    // two renderers. This method only knows how to paint a layer once it has one.
+    for (const layer of this.boardOverlayLayers()) drawLayer(layer.cells, layer.fill, layer.glow);
 
     // Whose turn it is, drawn last (after the walkable/attack overlays above) so it's never
     // washed out underneath them — the active unit always stands on its own reach overlay,
     // and a thin ring alone got lost under that blue fill. A full golden hex fill, not just
-    // a rim, per direct feedback ("the whole hex must get golden").
-    const active = this.activeTurnUnit();
+    // a rim, per direct feedback ("the whole hex must get golden"). visuallyActingUnit(), not
+    // activeTurnUnit() — see that method's own comment on why (an enemy's `.moved` flips true
+    // before its queued walk actually plays, which made this vanish mid-move).
+    const active = this.visuallyActingUnit();
     if (active) {
-      const { cx, cy } = this.hexCenter(active.x, active.y);
-      const pulse = 0.75 + Math.sin(this.time * 4) * 0.25;
-      const glowColor = active.side === "enemy" ? "230,120,90" : "255,215,140";
+      const marker = this.activeTurnHighlight();
+      if (!marker) return;
+      const { cx, cy } = this.hexCenter(marker.x, marker.y);
+      const playerTurn = active.side === "player";
+      const glowColor = playerTurn ? "214,161,42" : "210,84,54";
+      const pulse = 0.72 + Math.sin(this.time * 5.5) * 0.28;
       ctx.save();
-      ctx.shadowColor = `rgba(${glowColor},${0.9 * pulse})`;
-      ctx.shadowBlur = tile * 0.7 * pulse;
-      ctx.fillStyle = `rgba(${glowColor},${(0.34 + 0.18 * pulse).toFixed(3)})`;
-      ctx.strokeStyle = `rgba(${glowColor},${0.95 * pulse})`;
-      ctx.lineWidth = Math.max(2, tile * 0.09);
+      ctx.shadowColor = `rgba(${glowColor},${playerTurn ? Math.min(1, (0.72 + pulse * 0.2) * 1.5) : 1})`;
+      ctx.shadowBlur = tile * (playerTurn ? (0.42 + pulse * 0.34) * 1.5 : 0.9);
+      ctx.fillStyle = playerTurn ? `rgba(190,124,20,${(0.32 + pulse * 0.14) * 1.5})` : `rgba(${glowColor},1)`;
+      ctx.strokeStyle = playerTurn ? `rgba(255,222,119,${0.74 + pulse * 0.24})` : `rgba(${glowColor},1)`;
+      ctx.lineWidth = Math.max(2, tile * (playerTurn ? 0.055 + pulse * 0.025 : 0.09));
       this.hexPath(ctx, cx, cy, tile * 0.94);
       ctx.fill();
       ctx.stroke();
@@ -7224,11 +7827,263 @@ export class BattleEngine {
     if (shake) ctx.restore();
   }
 
+  /** Pure data: which cells are highlighted right now (walkable range, attack range, an aimed
+   * spell/AoE, an aura zone, the idle threat preview, ...) and what color each group gets —
+   * every `overlay(cells, fill, glow)` call that used to live inline in renderBoardOverlays,
+   * unchanged in behavior, just collected instead of drawn immediately. Shared by
+   * renderBoardOverlays (Canvas2D fill + glow/blur/stroke) and ThreeBattleRenderer (a flat
+   * translucent hex mesh per cell, positioned between terrain and decorations in world space)
+   * so the two can never disagree about which cells light up or in what color. */
+  boardOverlayLayers(): { cells: Point[]; fill: string; glow: boolean }[] {
+    const layers: { cells: Point[]; fill: string; glow: boolean }[] = [];
+    // `glow` defaults on for every existing caller. Dreaming Web's own persistent floor patch
+    // (a separate WebGL layer, see BattleCanvas's webFloorIds sync) already lights a webbed hex
+    // with its own breathing glow — stacking this overlay's full shadowBlur+bright rim on top
+    // of that, on every hex of a zone that can easily be a dozen-plus hexes and sits lit for
+    // several whole rounds (unlike a one-shot spell flash that's gone before anyone can really
+    // look at it), is what read as the movement highlight suddenly "blowing out" right after
+    // casting it. Passing false keeps the flat fill — still marks the hex as walkable — but
+    // drops the glow that was doubling up on the web's own.
+    const push = (cells: Iterable<Point>, fill: string, glow = true) => {
+      const arr = Array.isArray(cells) ? cells : [...cells];
+      if (arr.length) layers.push({ cells: arr, fill, glow });
+    };
+
+    for (const zone of this.auraZones) {
+      const cells = [...zone.cells].map((k) => {
+        const [x, y] = k.split(",").map(Number);
+        return { x: x!, y: y! };
+      });
+      push(cells, zone.kind === "protection" ? "rgba(150,210,255,0.3)" : "rgba(220,90,70,0.3)");
+    }
+
+    if (this.mode === "idle" && this.threat.length) push(this.threat, "rgba(220,120,90,0.5)");
+
+    if (this.mode === "awaitPotion") {
+      const selected = this.units.find((u) => u.id === this.selectedId);
+      if (selected) {
+        const range = [{ x: selected.x, y: selected.y }, ...hexNeighbors(selected.x, selected.y)].filter((c) =>
+          this.validPotionTarget(selected, c),
+        );
+        push(range, "rgba(150,210,170,0.45)");
+        const cell = this.hover;
+        if (cell && this.validPotionTarget(selected, cell)) push([cell], "rgba(170,230,180,0.55)");
+      }
+    }
+
+    if (this.mode === "awaitSpell") {
+      const selected = this.units.find((u) => u.id === this.selectedId);
+      if (selected && this.spellKind === "fireball") {
+        push(fireballRangeTiles(selected, this.cols, this.rows), "rgba(235,140,70,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && manhattan(selected, cell) <= FIREBALL.range) {
+          push(fireballTiles(fireballOrigin(cell, this.cols, this.rows), this.cols, this.rows), "rgba(235,140,70,0.55)");
+        }
+      } else if (selected && this.spellKind === "causticVenom") {
+        push(this.healRangeTiles(selected, CAUSTIC_VENOM.range), "rgba(200,210,90,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && manhattan(selected, cell) <= CAUSTIC_VENOM.range) {
+          push(hexAreaTiles(fireballOrigin(cell, this.cols, this.rows), CAUSTIC_VENOM.size, this.cols, this.rows), "rgba(200,210,90,0.55)");
+        }
+      } else if (selected && this.spellKind === "sweep") {
+        push(this.sweepTiles(selected), "rgba(220,150,70,0.5)");
+      } else if (selected && this.spellKind === "longShot") {
+        const reach: Point[] = [];
+        const max = this.longMax(selected);
+        for (let y = 0; y < this.rows; y++) {
+          for (let x = 0; x < this.cols; x++) {
+            const d = manhattan(selected, { x, y });
+            if (d >= selected.minRange && d <= max) reach.push({ x, y });
+          }
+        }
+        push(reach, "rgba(210,190,90,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) push([cell], "rgba(230,200,100,0.55)");
+      } else if (selected && this.spellKind === "piercing") {
+        push(allAxisRays(selected, this.cols, this.rows), "rgba(220,160,70,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        const line = cell ? this.piercingRay(selected, cell) : null;
+        if (line) push(line, "rgba(235,170,80,0.55)");
+      } else if (selected && this.spellKind === "piercingThrust") {
+        push(this.healRangeTiles(selected, selected.maxRange + 1), "rgba(220,160,80,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        const line = cell ? this.piercingThrustRay(selected, cell) : null;
+        if (line) push(line, "rgba(235,175,90,0.55)");
+      } else if (selected && (this.spellKind === "doubleStrike" || this.spellKind === "trip" || this.spellKind === "lifeDrain")) {
+        push(this.healRangeTiles(selected, selected.maxRange), "rgba(220,120,80,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) push([cell], "rgba(235,120,80,0.55)");
+      } else if (selected && this.spellKind === "cleave") {
+        push(hexNeighbors(selected.x, selected.y), "rgba(220,120,80,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        const arc = cell ? cleaveHexes(selected, cell, CLEAVE.hexes, this.cols, this.rows) : [];
+        if (arc.length) push(arc, "rgba(235,120,80,0.55)");
+      } else if (selected && this.spellKind === "summonFamiliar") {
+        push(this.healRangeTiles(selected, SUMMON_FAMILIAR.range), "rgba(180,150,235,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) push([cell], "rgba(200,170,245,0.55)");
+      } else if (selected && this.spellKind === "summonFamiliar2") {
+        push(this.healRangeTiles(selected, SUMMON_FAMILIAR2.range), "rgba(180,150,235,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) push([cell], "rgba(200,170,245,0.55)");
+      } else if (selected && this.spellKind === "summonFamiliar3") {
+        push(this.healRangeTiles(selected, SUMMON_FAMILIAR3.range), "rgba(180,150,235,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        // Preview the full 6-hex silhouette he'd actually land on, not just the anchor tile.
+        if (cell && this.spellAimValid(selected, cell)) push(footprint({ x: cell.x, y: cell.y, size: CLASSES.familiar3!.size, footprintOffsets: CLASSES.familiar3!.footprintOffsets }), "rgba(200,170,245,0.55)");
+      } else if (selected && this.spellKind === "webOfDreams") {
+        push(this.healRangeTiles(selected, WEB_OF_DREAMS.range), "rgba(170,140,230,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && manhattan(selected, cell) <= WEB_OF_DREAMS.range) {
+          push(hexAreaTiles(cell, webOfDreamsSize(selected.level), this.cols, this.rows), "rgba(185,155,240,0.55)");
+        }
+      } else if (selected && this.spellKind === "lightning") {
+        push(this.healRangeTiles(selected, LIGHTNING.range), "rgba(140,200,245,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) push([cell], "rgba(160,215,255,0.55)");
+      } else if (selected && this.spellKind === "lightningTier3") {
+        push(this.healRangeTiles(selected, LIGHTNING_T3.range), "rgba(120,210,255,0.5)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) push([cell], "rgba(180,235,255,0.65)");
+      } else if (selected && this.spellKind === "magicMissile") {
+        push(this.healRangeTiles(selected, MAGIC_MISSILE.range), "rgba(180,150,235,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) push([cell], "rgba(200,170,245,0.55)");
+      } else if (selected && this.spellKind === "phantasmalForce") {
+        push(this.healRangeTiles(selected, PHANTASMAL_FORCE.range), "rgba(180,150,235,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) push([cell], "rgba(200,170,245,0.55)");
+      } else if (selected && this.isHeal(this.spellKind)) {
+        push(this.healRangeTiles(selected, CURES[this.spellKind].range), "rgba(150,210,170,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.validHealTarget(selected, cell)) push([cell], "rgba(170,230,180,0.55)");
+      } else if (selected && this.spellKind === "cureDisease") {
+        push(this.healRangeTiles(selected, CURE_DISEASE.range), "rgba(150,210,170,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.validCureDiseaseTarget(selected, cell)) push([cell], "rgba(170,230,180,0.55)");
+      } else if (selected && this.spellKind === "multiShot") {
+        push(this.healRangeTiles(selected, selected.maxRange + MULTI_SHOT.rangeBonus), "rgba(210,190,90,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        if (cell && this.spellAimValid(selected, cell)) push([cell], "rgba(230,200,100,0.55)");
+      } else if (selected && this.spellKind === "divineWrath") {
+        push(this.healRangeTiles(selected, DIVINE_WRATH.range), "rgba(255,225,140,0.4)");
+        const cell = this.hover ?? this.spellAim;
+        const line = cell ? this.wrathRay(selected, cell, DIVINE_WRATH.range) : null;
+        if (line) push(line, "rgba(255,225,140,0.6)");
+      } else if (selected && this.spellKind === "shoulderSmash") {
+        push(hexNeighbors(selected.x, selected.y), "rgba(220,120,80,0.45)");
+        const cell = this.hover ?? this.spellAim;
+        const arc = cell ? cleaveHexes(selected, cell, shoulderSmashPower(selected.level).hexes, this.cols, this.rows) : [];
+        if (arc.length) push(arc, "rgba(235,120,80,0.55)");
+      } else if (selected && this.spellKind === "stampede") {
+        push(this.healRangeTiles(selected, STAMPEDE.range), "rgba(200,90,60,0.4)");
+        const cell = this.hover ?? this.spellAim;
+        const line = cell ? this.wrathRay(selected, cell, STAMPEDE.range) : null;
+        if (line) push(line, "rgba(200,90,60,0.6)");
+      }
+    }
+
+    if (this.mode === "selected" || this.mode === "awaitAttack" || this.mode === "awaitAction") {
+      if (this.mode === "selected") {
+        const reachable = [...this.reach.values()];
+        const inWeb = reachable.filter((c) => this.isWebCell(c.x, c.y));
+        const clear = inWeb.length ? reachable.filter((c) => !this.isWebCell(c.x, c.y)) : reachable;
+        push(clear, "rgba(140,200,245,0.5)");
+        if (inWeb.length) push(inWeb, "rgba(140,200,245,0.5)", false);
+      }
+      const selected = this.units.find((u) => u.id === this.selectedId);
+      const atkTiles: Point[] = [];
+      for (const foe of this.units) {
+        if (!foe.alive || foe.side === "player") continue;
+        if (this.mode === "selected" && this.attackFrom.has(foe.id)) atkTiles.push(...footprint(foe));
+        if ((this.mode === "awaitAttack" || this.mode === "awaitAction") && selected && canHitFrom(selected, selected, foe, this.tiles, this.cols, this.decorOverlay)) {
+          atkTiles.push(...footprint(foe));
+        }
+      }
+      push(atkTiles, "rgba(230,120,85,0.55)");
+      if (this.pendingFoeId) {
+        const foe = this.units.find((u) => u.id === this.pendingFoeId);
+        if (foe) push(footprint(foe), "rgba(245,95,65,0.6)");
+      }
+    }
+
+    return layers;
+  }
+
+  /** The active-turn unit's pulsing gold/red ring, as one more cell+color — kept separate from
+   * boardOverlayLayers because the Canvas2D path draws it with its own bespoke size/glow (see
+   * renderBoardOverlays' own active-turn block), not the generic drawLayer treatment.
+   * ThreeBattleRenderer uses this instead, to get the same cell and color without duplicating
+   * BattleEngine's turn-order logic. */
+  activeTurnHighlight(): { x: number; y: number; fill: string; player: boolean } | null {
+    const active = this.visuallyActingUnit();
+    if (!active) return null;
+    let { x, y } = active;
+    // Logical x/y commit only when a walk step finishes, but the sprite is already moving.
+    // Advance the marker at the visible midpoint so it never trails one hex behind.
+    const moving = this.active;
+    if (moving?.type === "move" && moving.id === active.id) {
+      // The gold player marker is a turn cue, not a second moving sprite. Hide it during a
+      // hero's walk; enemy movement keeps its red marker so AI turns remain easy to follow.
+      if (active.side === "player") return null;
+      const from = moving.path[moving.i];
+      const to = moving.path[moving.i + 1];
+      if (from && to) {
+        const dur = this.speedMode === "fast" ? 0.12 : this.speedMode === "slow" ? 0.36 : 0.22;
+        const progress = easeOut(Math.min(1, moving.t / dur));
+        ({ x, y } = progress < 0.5 ? from : to);
+      }
+    }
+    const glowColor = active.side === "enemy" ? "210,84,54" : "214,161,42";
+    return { x, y, fill: `rgba(${glowColor},1)`, player: active.side === "player" };
+  }
+
   /** Units, HP bars, particles, projectiles, banners, and the foreground decoration layer —
    * drawn on top of renderGround's output. Re-applies this frame's screen-shake offset (see
    * frameShakeDx/Dy) independently rather than sharing one still-open ctx.save() with
    * renderGround, since the two may be drawing onto two different canvases. */
-  renderUnitsAndOverlays(ctx: any, cssW: number, cssH: number): void {
+  /** getLightAt, when given, answers "how much extra light falls on this screen point right
+   * now?" from actually-active spell casts (fire/acid/holy/darkness/webShot) — see
+   * EffectsRenderer.lightBoostAt, which BattleCanvas wires this to. Positive brightens a unit
+   * standing near a fire/holy/acid glow or a travelling web shot; negative (darkness) dims one.
+   * Omitted (the render() convenience path above, which has no EffectsRenderer of its own)
+   * simply skips the check — units draw exactly as if nothing were casting light nearby.
+   *
+   * skipGroundDecor, when true, skips the "ground"/"behind" drawDecorations calls below (the
+   * "front" one near the end still runs) — set by BattleCanvas when gfx/three/
+   * ThreeBattleRenderer is drawing the ground canvas instead of WebGL2DRenderer, since that
+   * renderer already draws those same two layers itself (see its own ensureDecorBuilt); without
+   * this every ground/behind prop would be drawn twice, once by each renderer. */
+  renderUnitsAndOverlays(
+    ctx: any,
+    cssW: number,
+    cssH: number,
+    getLightAt?: (px: number, py: number) => number,
+    skipGroundDecor?: boolean,
+    // ThreeBattleRenderer draws unit sprites itself once it has them (see its own
+    // ensureUnitsBuilt/syncUnits) — this skips just the character-image draw calls below so
+    // they don't double-draw, while everything else in this loop (shadow, HP bar, level/heal
+    // glow, status FX) keeps rendering on this canvas exactly as before, per
+    // THREEJS_MILESTONE1_HANDOFF.md's scoping of what stays here vs what moves.
+    skipUnitSprites?: boolean,
+    // MILESTONE 2 — ThreeBattleRenderer now casts a real shadow from an invisible per-unit box
+    // (see its own shadowCasterMaterial/updateSun); this skips just this fake ellipse so the two
+    // don't visibly double up under ?renderer=three. Independent of skipUnitSprites: the fake
+    // shadow is keyed to the sprite's own screen position/pose (px, sway, lift, breath, foot),
+    // not to whether the sprite image itself still draws here.
+    skipUnitShadow?: boolean,
+    // The mouse-selection hex outline below assumed unit sprites were drawn later on this same
+    // canvas, so painting it first put it "under" them — true for the legacy 2D renderer, but
+    // ThreeBattleRenderer's characters live one canvas down, stacked BELOW this one (see
+    // BattleCanvas), so that outline ended up drawn in front of every character instead. Skip
+    // it here and ThreeBattleRenderer draws the same outline itself as scene geometry, at the
+    // same z it uses for boardOverlayLayers/activeTurnHighlight — genuinely behind decorations
+    // and units rather than merely earlier in one canvas' own draw order.
+    skipCursorHex?: boolean,
+    // Fog 2's requested stacking is decorations → fog → units. When Three owns decorations,
+    // foreground props must skip this top canvas too or they would leap above both fog and units.
+    skipFrontDecor?: boolean,
+  ): void {
     const tile = ZOOM_RADII[this.zoom]!;
     const sqrt3 = Math.sqrt(3);
     const shake = this.reducedMotion ? 0 : this.trauma * this.trauma;
@@ -7237,40 +8092,47 @@ export class BattleEngine {
       ctx.translate(this.frameShakeDx, this.frameShakeDy);
     }
 
-    // Ground decorations (trees, houses, rocks...) draw here, above the WebGL elemental FX
-    // canvas but below character sprites — the same relative order as when this used to
-    // happen in renderGround, just moved onto this (topmost) canvas so FX never covers them.
-    this.drawDecorations(ctx, tile, cssW, cssH);
-    // A rear parapet must remain visible over the ground and tactical highlights, while
-    // character sprites still pass in front of it.
-    this.drawDecorations(ctx, tile, cssW, cssH, "behind");
+    if (!skipGroundDecor) {
+      // Ground decorations (trees, houses, rocks...) draw here, above the WebGL elemental FX
+      // canvas but below character sprites — the same relative order as when this used to
+      // happen in renderGround, just moved onto this (topmost) canvas so FX never covers them.
+      this.drawDecorations(ctx, tile, cssW, cssH);
+      // A rear parapet must remain visible over the ground and tactical highlights, while
+      // character sprites still pass in front of it.
+      this.drawDecorations(ctx, tile, cssW, cssH, "behind");
+    }
     this.drawPortalFx(ctx, tile);
 
     // The mouse-selection hex outline is drawn here, on this (topmost) canvas rather than
     // in renderGround, so it always reads above the WebGL water FX layer stacked in between
     // the ground and units canvases (see BattleCanvas) instead of being hidden under it —
     // but before any unit sprite, so the outline (and its blocked/height label) reads as a
-    // ground marking under the units instead of a decal painted over their artwork.
+    // ground marking under the units instead of a decal painted over their artwork. Under
+    // ThreeBattleRenderer the characters live one canvas further down instead (see
+    // skipCursorHex's own comment), so only the label stays here; the outline itself is
+    // skipped and drawn as real scene geometry there instead.
     {
       const cur = this.hover ?? this.cursor;
       const { cx, cy } = this.hexCenter(cur.x, cur.y);
       const hid = tileAt(this.tiles, this.cols, cur.x, cur.y);
       const ht = TERRAIN[hid];
       const blocked = !ht.passable;
-      if (blocked) {
-        ctx.save();
-        ctx.shadowColor = "rgba(219,58,44,0.95)";
-        ctx.shadowBlur = tile * 0.55;
-        ctx.strokeStyle = "rgba(255,90,72,0.95)";
-        ctx.lineWidth = 3;
-        this.hexPath(ctx, cx, cy, tile * 0.9);
-        ctx.stroke();
-        ctx.restore();
-      } else {
-        ctx.strokeStyle = "rgba(240,235,227,0.9)";
-        ctx.lineWidth = 2;
-        this.hexPath(ctx, cx, cy, tile * 0.9);
-        ctx.stroke();
+      if (!skipCursorHex) {
+        if (blocked) {
+          ctx.save();
+          ctx.shadowColor = "rgba(219,58,44,0.95)";
+          ctx.shadowBlur = tile * 0.55;
+          ctx.strokeStyle = "rgba(255,90,72,0.95)";
+          ctx.lineWidth = 3;
+          this.hexPath(ctx, cx, cy, tile * 0.9);
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          ctx.strokeStyle = "rgba(240,235,227,0.9)";
+          ctx.lineWidth = 2;
+          this.hexPath(ctx, cx, cy, tile * 0.9);
+          ctx.stroke();
+        }
       }
       if (blocked || ht.height) {
         const label = blocked ? ht.name.toUpperCase() : "ALTO +2";
@@ -7288,6 +8150,14 @@ export class BattleEngine {
     }
 
     const cell = tile * sqrt3;
+    // A single "sun" direction shared (by hand, kept in sync — see the comment on
+    // WebGL2DRenderer's lightDirX/Y) with the sprite relighting in WebGL2DRenderer.ts: that
+    // renderer's default light points toward (-0.6, -0.8) screen-space, so shadows here use the
+    // exact opposite vector, offset and stretched along that axis instead of sitting as a
+    // perfectly round puddle centered under every unit regardless of where the light actually is.
+    const shadowDirX = 0.6;
+    const shadowDirY = 0.8;
+    const shadowOffset = cell * 0.16;
     const sorted = [...this.units].sort((a, b) => a.drawY - b.drawY || a.drawX - b.drawX);
     for (const u of sorted) {
       if (u.fade <= 0) continue;
@@ -7299,131 +8169,35 @@ export class BattleEngine {
       const boss = isBossClass(u.classId);
       const { cx: px, cy: py } = this.unitPixel(u);
       const foot = s >= 4 ? 2.15 : s === 2 ? 1.5 : boss ? 1.12 : 1;
-      const { bob, sway, breath } = this.liveMotion(u, cell);
-      // Purely visual: the sprite and the things that hang off it rise, the shadow below
-      // does not, and the sort above already ran on the logical row. See unitLift.
-      const lift = this.unitLift(u, cell);
+      // Pose (idle/walk/atk/cast/counter), size corrections, live idle motion (bob/sway/
+      // breath) and high-ground lift — see computeUnitVisual's own comment; shared with
+      // ThreeBattleRenderer's own unit meshes via the public unitVisual() wrapper.
+      const { bob, sway, breath, lift, img, w, h, footY, scaleX, scaleY, footOffset } = this.computeUnitVisual(u, cell, tile);
       ctx.save();
-      ctx.globalAlpha = u.fade * (u.moved && u.side === "player" && this.phase === "player" ? 0.55 : 1);
-      ctx.fillStyle = "rgba(0,0,0,0.4)";
-      ctx.beginPath();
-      ctx.ellipse(
-        px + sway,
-        py + cell * 0.22,
-        cell * 0.22 * foot * (1 + breath * 0.4),
-        cell * 0.1 * Math.min(2.2, foot) * (1 - breath * 0.3),
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      const atk = this.attackPose(u);
-      const moving = this.active?.type === "move" && this.active.id === u.id;
-      const idle = !atk && !moving ? this.art.idles[u.sprite] : undefined;
-      // While moving, a sprite that has a walk cut plays it; one that doesn't falls back to
-      // its idle loop, which idleFrame already runs faster for a moving unit.
-      const faceRight = u.facing === 1;
-      // Lancer's authored move/move-left cuts read backwards against their own facing
-      // (moving right visibly played the left-facing footage and vice versa) — swap which
-      // pool answers which facing, walk only, per direct report. Cultist V2's own walk
-      // "backwards" complaint has a different cause: see dirActionWalk below.
-      const useWalkLeft = u.sprite === "lancer" ? faceRight : !faceRight;
-      const walkPool = useWalkLeft ? (this.art.walksLeft[u.sprite] ?? this.art.walks[u.sprite]) : this.art.walks[u.sprite];
-      const atkPool = faceRight ? this.art.attacks[u.sprite] : (this.art.attacksLeft[u.sprite] ?? this.art.attacks[u.sprite]);
-      const walk = atk == null && moving ? walkPool : undefined;
-      // attackPose computes its index against whichever pool it picked (casts for a spell/heal
-      // cast, counters for the defender's own counter stages, attacks otherwise), so this has
-      // to mirror that same choice or the index lands in the wrong array.
-      const casting = this.active && (this.active.type === "spell" || this.active.type === "heal") && this.active.att === u.id;
-      const castPool = faceRight ? this.art.casts[u.sprite] : (this.art.castsLeft[u.sprite] ?? this.art.casts[u.sprite]);
-      const countering = this.active?.type === "combat" && this.active.stage.startsWith("counter") && this.active.def === u.id;
-      const counterPool = faceRight ? this.art.counters[u.sprite] : (this.art.countersLeft[u.sprite] ?? this.art.counters[u.sprite]);
-      const frames = atk != null ? (casting ? (castPool ?? atkPool) : countering ? (counterPool ?? atkPool) : atkPool) : walk ?? idle ?? this.art.sprites[u.sprite];
-      const n = frames?.length ?? 0;
-      const fi = atk != null ? atk : walk ? this.walkFrame(u, n) : this.idleFrame(u, n || 4);
-      const walkDirs = moving ? this.art.walkDirs[u.sprite] : undefined;
-      const img = (walkDirs ? walkDirs[u.walkPose] : undefined) ?? frames?.[fi] ?? frames?.[0];
-      // The draw-size correction keys off the footprint SHAPE (reference equality against
-      // FOOTPRINT_TYPE_8 or FOOTPRINT_TYPE_7), not a hardcoded classId — every big creature
-      // (Troll, Asherah, Horror, and any future one on either shape) gets the same default
-      // correction automatically, rather than needing its own one-off case added here.
-      // Depends on that creature's own sprite frames being cropped to roughly the same
-      // canvas-fill ratio as the others — this correction assumes that, it doesn't measure it.
-      const isBigCreatureFootprint = u.footprintOffsets === FOOTPRINT_TYPE_8 || u.footprintOffsets === FOOTPRINT_TYPE_7;
-      // Keep these display adjustments tied to the unit class as well as the asset id.
-      // This makes them survive saved scenarios that still carry an older sprite id.
-      // defaultLancer is still the same tightly-cropped silver-armor-and-spear cut as
-      // lancer under an older asset name, so it keeps the boost. Aldric moved to the
-      // Aldric Final art (same full-body-on-canvas crop convention as Kael Final), so it
-      // now renders at the same scale as every other human sprite instead of this boost.
-      // "kael" (Guerreiro) reads the same on-disk cut as kaelEarly, so it needs the same
-      // scale as kaelEarly, not kaelFinal's correction — only kaelFinal's own (larger,
-      // full-body-on-canvas) art needs the boost.
-      // Sandoval is a distinct boss cut, not this same asset, so it gets its own scale.
-      const isLancer = u.classId === "lancer" || u.sprite === "lancer" || u.sprite === "defaultLancer";
-      const isSandoval = u.classId === "sandoval" || u.sprite === "sandoval";
-      const isFamiliar = u.classId === "familiar" || u.sprite === "familiar";
-      const isKaelFinal = u.sprite === "kaelFinal";
-      // Cultist V2's art is cropped tighter to its own canvas than the other human sprites
-      // (fills more of both width and height), so at the shared default scale it reads
-      // noticeably taller/bulkier than Kael/Neera/Voss standing next to it.
-      const isCultistV2 = u.classId === "cultistV2" || u.sprite === "cultist-v2";
-      const spriteScale = isLancer ? 1.4 : isSandoval ? 1.2 : isFamiliar ? 0.5 : isKaelFinal ? 0.9 : isCultistV2 ? 0.8 : 1;
-      // Familiar 2's own cut is a landscape 1400x704 canvas (the creature spans its arms wide,
-      // filling maybe half the canvas width but most of its height) — every other sprite's
-      // source is portrait-ish and roughly fills its own frame, which is what the shared
-      // w/h ratio below (1.11:1.42) assumes. Drawing this canvas through that same
-      // portrait-shaped box squeezes the wide source down hard, which is what was reading as
-      // both "too small" (the creature shrinks along with its own padding) and "pixelated"
-      // (a 1400px-wide source aggressively downscaled into a narrow box aliases badly).
-      // Widening just this sprite's box independently of spriteScale (which still scales height
-      // normally) fixes both without touching any other sprite's sizing. Verified against the
-      // real sprite file with a standalone render, not tuned blind.
-      const familiar2WidthMul = u.sprite === "familiar2" ? 1.9 : 1;
-      // Cultist V2's cast-*.png cut is its own separate export from atk-*.png/idle, on a
-      // taller canvas (358x640 vs 360x570/580) with the character cropped noticeably looser
-      // inside it — measured directly off the files (bounding-box scan of the actual PNG
-      // alpha, not eyeballed): idle/attack fill ~85-99% of their own canvas height, the cast
-      // cut only ~75%. Drawn through the same fixed box as everything else, that read as the
-      // character suddenly shrinking the instant a cast animation started. 1.32/1.12 bring
-      // the cast cut's effective on-screen size back to roughly match idle/attack's.
-      // cast-27.png alone measured ~11% bigger content than its cast-cut neighbors — a real
-      // inconsistency baked into that one source frame, not something a single scale
-      // constant here can fix; left as a known residual wobble on that frame specifically.
-      const isCultistV2Casting = isCultistV2 && casting;
-      const cultistV2CastHeightMul = isCultistV2Casting ? 1.32 : 1;
-      const cultistV2CastWidthMul = isCultistV2Casting ? 1.12 : 1;
-      const h = cell * (s >= 4 ? 3.35 : s === 2 ? 1.72 : boss ? 1.44 : 1.42) * 1.2 * (isBigCreatureFootprint ? 0.75 : 1) * spriteScale * cultistV2CastHeightMul;
-      const w = cell * (s >= 4 ? 2.85 : s === 2 ? 1.85 : boss ? 1.12 : 1.11) * 1.2 * (isBigCreatureFootprint ? 0.75 : 1) * spriteScale * familiar2WidthMul * cultistV2CastWidthMul;
-      // The cast cut's own content also sits higher inside its canvas than idle/attack's does
-      // (feet reach only ~87% of the way down vs idle's ~99%) — without this, boosting h above
-      // would float the feet even further off the ground than they already subtly are. Shifts
-      // the whole draw down by that measured gap so the feet land back on the anchor point.
-      const cultistV2CastFootOffset = isCultistV2Casting ? h * 0.127 : 0;
-      // Big creatures plant their feet at the bottom corner of their front hex (tile * 0.9,
-      // matching the hex outline radius used elsewhere) instead of the smaller offset tuned
-      // for normal-size sprites, so the feet don't float above the tile they stand on.
-      const footY = s >= 4 ? tile * 0.9 : cell * 0.42;
+      ctx.globalAlpha = u.fade * (u.moved && u.side === "player" && this.phase === "player" ? 0.8 : 1);
+      if (!skipUnitShadow) {
+        // A soft cast shadow instead of a flat dark puddle: a radial gradient (center dark,
+        // fading fully transparent at the edge) offset toward shadowDir so it reads as light
+        // falling across the board rather than an ambient-occlusion blob glued to every unit's
+        // feet. A unit standing on high ground (lift > 0, see unitLift — including mid-step
+        // while walking on/off a raised hex) throws a slightly longer shadow, same as a real
+        // object held further from the ground it's cast onto.
+        const stretch = 1 + Math.min(0.6, lift / cell) * 0.5;
+        const shadowCx = px + sway + shadowDirX * shadowOffset * stretch;
+        const shadowCy = py + cell * 0.22 + shadowDirY * shadowOffset * stretch;
+        const shadowRx = cell * 0.24 * foot * (1 + breath * 0.4) * stretch;
+        const shadowRy = cell * 0.1 * Math.min(2.2, foot) * (1 - breath * 0.3);
+        const shadowGrad = ctx.createRadialGradient(shadowCx, shadowCy, 0, shadowCx, shadowCy, Math.max(shadowRx, shadowRy));
+        shadowGrad.addColorStop(0, "rgba(6,7,10,0.5)");
+        shadowGrad.addColorStop(0.72, "rgba(6,7,10,0.3)");
+        shadowGrad.addColorStop(1, "rgba(6,7,10,0)");
+        ctx.fillStyle = shadowGrad;
+        ctx.beginPath();
+        ctx.ellipse(shadowCx, shadowCy, shadowRx, shadowRy, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.translate(px + sway, py + footY + bob - lift);
-      // Dedicated left/right walk+attack cuts already face the enemy, so flipping
-      // them would put the spear/staff on the wrong side. Idle still flips.
-      // theButcher (The Butcher — distinct from "punisher"/Carrasco), familiar2 (Familiar
-      // Maior) and cultist-v2 only have a dedicated left cut for their walk, not their attack
-      // (see walksLeft.theButcher/familiar2/"cultist-v2" in assets.ts) — their attack still
-      // falls back to the mirrored right-facing pool, so all three stay out of the attack
-      // half of this check. cultist-v2 was missing from here entirely before: its own
-      // dedicated left-facing footage was getting mirrored a second time on top of itself
-      // while facing left, which is what actually read as "walking backwards" for it.
-      const dirActionWalk = (u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "theButcher" || u.sprite === "familiar2" || u.sprite === "cultist-v2") && moving;
-      const dirActionAttack = (u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval") && atk != null;
-      const dirAction = dirActionWalk || dirActionAttack;
-      // The familiar's art is drawn facing left by default — the opposite of every other
-      // sprite's "facing 1 shows the sheet as drawn" convention — so its mirror has to run
-      // backwards from u.facing or it walks left while visually facing right and vice versa.
-      const facing = u.classId === "familiar" ? -u.facing : u.facing;
-      const flip = dirAction ? 1 : facing;
-      if (u.sprite === "kael" || u.sprite === "kaelEarly" || u.sprite === "aldric" || u.sprite === "defaultLancer" || u.sprite === "lancer" || u.sprite === "sandoval" || u.sprite === "conjurer" || u.sprite === "malrec") ctx.scale(flip, 1);
-      else ctx.scale(flip * (1 - breath * 0.22), 1 + breath);
+      ctx.scale(scaleX, scaleY);
       if (u.levelGlow > 0) {
         const pulse = 0.75 + Math.sin(this.time * 7) * 0.25;
         const bg = ctx.createRadialGradient(0, -h * 0.5, 0, 0, -h * 0.5, w * 1.15);
@@ -7453,8 +8227,18 @@ export class BattleEngine {
         ctx.shadowColor = `rgba(${halo.core},${0.9 * u.healGlow})`;
         ctx.shadowBlur = w * (u.healGlowKind === "holyMedium" ? 0.48 : 0.32) * u.healGlow * pulse;
       }
+      // Real point-light influence from whatever's actually casting light nearby right now
+      // (a fire/holy/acid glow, a travelling web shot, darkness's own dimming) — see
+      // EffectsRenderer.lightBoostAt. Skipped entirely when a hit-flash is already driving
+      // the filter (a rare, deliberately much brighter flash that shouldn't be diluted by
+      // ambient spell light), and when nothing nearby is casting anything (the common case).
+      const lightBoost = getLightAt ? getLightAt(px, py) : 0;
       if (u.flash > 0) ctx.filter = `brightness(${1.8 + u.flash})`;
-      if (img) ctx.drawImage(img, -w / 2, -h + cultistV2CastFootOffset, w, h);
+      else if (Math.abs(lightBoost) > 0.03) ctx.filter = `brightness(${Math.max(0.35, 1 + lightBoost * 0.5)})`;
+      if (skipUnitSprites) {
+        // ThreeBattleRenderer already drew this unit's sprite on its own canvas, at the same
+        // world position — see the param doc above.
+      } else if (img) ctx.drawImageLit(img, -w / 2, -h + footOffset, w, h);
       else {
         ctx.fillStyle = u.side === "player" ? "#8a97a1" : u.side === "neutral" ? "#5f8a58" : "#a35a4a";
         ctx.fillRect(-w / 2, -h, w, h);
@@ -7462,17 +8246,17 @@ export class BattleEngine {
       // A second glow pass on top of the sprite (shadowBlur alone, no offset, mimics an outer
       // rim glow following the art's own alpha edges) so the effect reads as coming off the
       // character rather than just floating behind it.
-      if (u.levelGlow > 0 && img) {
+      if (!skipUnitSprites && u.levelGlow > 0 && img) {
         const pulse = 0.75 + Math.sin(this.time * 7) * 0.25;
         ctx.shadowBlur = w * 0.55 * u.levelGlow * pulse;
-        ctx.drawImage(img, -w / 2, -h + cultistV2CastFootOffset, w, h);
+        ctx.drawImage(img, -w / 2, -h + footOffset, w, h);
       }
-      if (u.healGlow > 0 && img) {
+      if (!skipUnitSprites && u.healGlow > 0 && img) {
         const pulse = 0.8 + Math.sin(this.time * 5) * 0.2;
         const halo = this.healHaloRgb(u.healGlowKind);
         ctx.shadowColor = `rgba(${halo.core},${0.88 * u.healGlow})`;
         ctx.shadowBlur = w * (u.healGlowKind === "holyMedium" ? 0.58 : 0.42) * u.healGlow * pulse;
-        ctx.drawImage(img, -w / 2, -h + cultistV2CastFootOffset, w, h);
+        ctx.drawImage(img, -w / 2, -h + footOffset, w, h);
       }
       this.drawStatusFx(ctx, u, w, h);
       ctx.filter = "none";
@@ -8044,7 +8828,7 @@ export class BattleEngine {
 
     // Foreground parapets are the nearest scenery: no unit, HP bar, projectile, or spell
     // effect that is physically behind their artwork may show through.
-    this.drawDecorations(ctx, tile, cssW, cssH, "front");
+    if (!skipFrontDecor) this.drawDecorations(ctx, tile, cssW, cssH, "front");
 
     if (shake) ctx.restore();
   }

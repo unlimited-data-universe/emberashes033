@@ -5,18 +5,26 @@
     "aldeia",
     "thebridge"
   ],
+  "estalagem": [
+    "estalagem"
+  ],
   "ruins": [
     "muralha",
     "fortaleza",
     "templo",
     "cripta"
   ],
-  "estalagem": [
-    "estalagem"
-  ],
   "dungeon": [
     "colina",
     "passagem",
     "profundezas"
+  ],
+  "misty-cave": [
+    "vertente",
+    "portao",
+    "misty-cave-dungeon"
+  ],
+  "wisp-forest": [
+    "wisp-forest"
   ]
 }

@@ -90,6 +90,74 @@ void main() {
 }
 `;
 
+/** Same contract as FRAG_TEX (drawImage's plain textured quad), plus a cheap directional relight
+ * for flat sprite billboards — no real geometry/normals to light, so this leans on the two
+ * things a flat cutout actually has: where a pixel sits within the sprite's own silhouette
+ * (top vs. feet), and which way its alpha edge faces (dFdx/dFdy of alpha, free in GLSL ES 300,
+ * same trick as shaders.ts's relief()). The alpha gradient at a silhouette edge points outward
+ * away from the shape, so comparing -gradient to u_lightDir tells us whether that bit of edge
+ * catches the key light (a bright rim) or falls into its own shadow — plus a soft top-to-feet
+ * wash so the whole cutout, not just its outline, leans toward "lit from up there," and a
+ * contact-AO darkening at the very bottom so the sprite doesn't look like it's floating a hair
+ * above the shadow blob engine.ts draws under it. Deliberately gentle (see u_lightStrength) —
+ * this is meant to sit on top of hand-painted character art, not fight it with a full relight. */
+const FRAG_TEX_LIT = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_alpha;
+uniform float u_brightness;
+uniform vec2 u_lightDir; // normalized, screen-space (x right, y down), points TOWARD the light
+uniform float u_lightStrength; // 0 = identical to plain drawImage, ~0.3-0.5 is a tasteful amount
+out vec4 FragColor;
+void main() {
+  vec4 t = texture(u_tex, v_uv);
+  vec3 rgb = t.rgb * u_brightness;
+
+  // No early discard on low alpha here, deliberately: dFdx/dFdy below need every fragment in a
+  // hardware 2x2 pixel quad to still be "live" right at the silhouette edge — a discard on the
+  // transparent side of that same boundary is exactly where it would make the derivative
+  // undefined, which is exactly where the rim term below needs it most. Fully transparent
+  // pixels still cost a few ALU ops instead of an early-out, but they already contribute
+  // nothing once alpha-blended (t.a * u_alpha is ~0), same as plain FRAG_TEX with no discard.
+  vec2 edge = vec2(dFdx(t.a), dFdy(t.a));
+  float edgeLen = length(edge);
+  vec2 outward = edgeLen > 1e-5 ? -edge / edgeLen : vec2(0.0);
+  // Second attempt: the first pass boosted weak signal with pow(rim, 0.5) (a sqrt), which
+  // pushes even a small, barely-facing-the-light dot product way up — since a rounded
+  // silhouette has SOME positive dot product across most of its perimeter, that boost lit up
+  // almost the entire outline instead of just the side actually facing the light, which is
+  // exactly what read as "a yellow glow around the sprite" rather than directional lighting.
+  // Squaring instead of sqrt-ing does the opposite: it suppresses everything except edges
+  // that face close to straight at the light, so the highlight stays on one side.
+  float facing = clamp(dot(outward, u_lightDir), 0.0, 1.0);
+  float rim = facing * facing * smoothstep(0.0, 0.6, edgeLen);
+
+  // v_uv.y runs 0 (top of the sprite box) to 1 (its feet) — see VERT_UNIT_QUAD. Same fix as
+  // rim above: the old +/-0.5 range collapsed to a few percent of brightness once multiplied
+  // through — full +/-1.0 range here so "top of sprite catches the key light, feet sit in its
+  // own shadow" is something you can actually see, not just something true in the math.
+  float wash = clamp(1.0 - v_uv.y, 0.0, 1.0) * 2.0 - 1.0;
+  float lit = clamp(wash + rim, -1.0, 1.0) * u_lightStrength;
+
+  // Wider tint spread than before (was ~0.8-1.1, barely off-white) — a real warm/cool swing so
+  // the direction of the light is legible on the sprite itself, not just in its shadow.
+  vec3 keyTint = vec3(1.5, 1.28, 0.95);
+  vec3 shadeTint = vec3(0.45, 0.5, 0.72);
+  vec3 graded = rgb * mix(shadeTint, keyTint, clamp(lit * 0.5 + 0.5, 0.0, 1.0));
+  // Toned down and less yellow than the first pass (was a warm cream added at 0.9 strength,
+  // which read as a colored outline glow on its own regardless of the fix above) — closer to
+  // a neutral bright highlight, added more gently now that it's actually confined to the
+  // light-facing edge instead of spread around the whole silhouette.
+  vec3 finalRgb = mix(rgb, graded, u_lightStrength) + vec3(1.0, 0.97, 0.9) * rim * u_lightStrength * 0.4;
+
+  float ao = smoothstep(0.82, 1.0, v_uv.y);
+  finalRgb *= mix(1.0, 0.62, ao * u_lightStrength);
+
+  FragColor = vec4(finalRgb, t.a * u_alpha);
+}
+`;
+
 type Rgba = [number, number, number, number];
 
 function sweepDelta(a0: number, a1: number, ccw: boolean): number {
@@ -343,6 +411,7 @@ export class WebGL2DRenderer {
   private gl: WebGL2RenderingContext;
   private progFill: WebGLProgram;
   private progTex: WebGLProgram;
+  private progTexLit: WebGLProgram;
   private polyBuf: WebGLBuffer;
   private quadBuf: WebGLBuffer;
   private width: number;
@@ -368,6 +437,31 @@ export class WebGL2DRenderer {
   textAlign = "left";
   textBaseline = "alphabetic";
 
+  // Shared "sun" direction for every lit sprite drawn via drawImageLit — screen-space (x right,
+  // y down), already unit length, points TOWARD the light source: a classic upper-left key
+  // light. engine.ts's per-unit cast shadow uses the exact opposite vector (0.6, 0.8) as its own
+  // offset direction (kept in sync by hand, not read from here, since engine.ts's shadow math
+  // runs on plain numbers, not this renderer), so the two systems agree on where the light
+  // lives instead of each guessing separately. setLightDirection is exposed for a future
+  // day/night or per-map light angle; nothing currently calls it, so it's a no-op today beyond
+  // these defaults. lightStrength is the master intensity: 0 makes drawImageLit pixel-identical
+  // to plain drawImage, so it's always safe to dial back per-scene without touching call sites.
+  private lightDirX = -0.6;
+  private lightDirY = -0.8;
+  // Off by default — the ambient key-light/rim tint this drives turned out not to be what was
+  // wanted at all (a real light SOURCE — a torch, a cast spell — not a flat sun-angle tint
+  // applied everywhere regardless of what's actually lit). drawImageLit at 0 renders pixel-
+  // identical to plain drawImage; the plumbing (shader, uniforms, direction) stays in place
+  // in case a real per-source light model gets built on top of it later, but it does nothing
+  // to the image right now.
+  lightStrength = 0;
+
+  setLightDirection(dx: number, dy: number): void {
+    const len = Math.hypot(dx, dy) || 1;
+    this.lightDirX = dx / len;
+    this.lightDirY = dy / len;
+  }
+
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", { antialias: true, alpha: true, stencil: true });
     if (!gl) throw new Error("WebGL2 context failed");
@@ -379,6 +473,7 @@ export class WebGL2DRenderer {
     this.polyBuf = gl.createBuffer()!;
     this.progFill = createProgram(gl, VERT_LOCAL, FRAG_FILL);
     this.progTex = createProgram(gl, VERT_UNIT_QUAD, FRAG_TEX);
+    this.progTexLit = createProgram(gl, VERT_UNIT_QUAD, FRAG_TEX_LIT);
 
     this.ortho(0, this.width, this.height, 0);
     gl.viewport(0, 0, this.width, this.height);
@@ -856,6 +951,41 @@ export class WebGL2DRenderer {
       const cx = x + w / 2, cy = y + h / 2;
       const sw = w * scaleMul, sh = h * scaleMul;
       this.drawTexturedQuad(tex, cx - sw / 2, cy - sh / 2, sw, sh, alphaMul, tint);
+    });
+    if (hadClip) this.clearClipMask();
+  }
+
+  private drawTexturedQuadLit(tex: WebGLTexture, x: number, y: number, w: number, h: number, alphaMul: number) {
+    const gl = this.gl;
+    this.applyBlend();
+    gl.useProgram(this.progTexLit);
+    bindAttrib(gl, this.quadBuf, 0, 2);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniform1i(gl.getUniformLocation(this.progTexLit, "u_tex"), 0);
+    gl.uniform4f(gl.getUniformLocation(this.progTexLit, "u_rect"), x, y, w, h);
+    gl.uniform1f(gl.getUniformLocation(this.progTexLit, "u_alpha"), this.globalAlpha * alphaMul);
+    gl.uniform1f(gl.getUniformLocation(this.progTexLit, "u_brightness"), this.parseBrightness());
+    gl.uniform2f(gl.getUniformLocation(this.progTexLit, "u_lightDir"), this.lightDirX, this.lightDirY);
+    gl.uniform1f(gl.getUniformLocation(this.progTexLit, "u_lightStrength"), this.lightStrength);
+    gl.uniformMatrix4fv(gl.getUniformLocation(this.progTexLit, "u_matrix"), false, this.matrix);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  /** Same contract as drawImage, but relit with the scene's directional key light + rim (see
+   * FRAG_TEX_LIT) instead of drawn flat — for sprites that should read as sitting IN the
+   * diorama's lighting (units, ground decorations) rather than pasted-on cutouts. Shares
+   * save()/restore(), globalAlpha, filter brightness and the active clip mask with plain
+   * drawImage. Glow-ring copies (shadowBlur) still draw through the flat path — a colored ring
+   * doesn't need relighting, only the real sprite on top does. */
+  drawImageLit(img: CanvasImageSource, x: number, y: number, w: number, h: number) {
+    const tex = this.getTexture(img);
+    const hadClip = this.applyClipMaskIfAny();
+    this.withGlow({ x, y, w, h }, (scaleMul, tint, alphaMul) => {
+      const cx = x + w / 2, cy = y + h / 2;
+      const sw = w * scaleMul, sh = h * scaleMul;
+      if (tint) this.drawTexturedQuad(tex, cx - sw / 2, cy - sh / 2, sw, sh, alphaMul, tint);
+      else this.drawTexturedQuadLit(tex, cx - sw / 2, cy - sh / 2, sw, sh, alphaMul);
     });
     if (hadClip) this.clearClipMask();
   }

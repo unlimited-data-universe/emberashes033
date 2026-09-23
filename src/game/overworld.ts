@@ -269,7 +269,7 @@ function roadEncounterIds(): string[] {
   return RANDOM_ENCOUNTER_REGIONS.find((region) => region.id === "road")?.encounterIds ?? [];
 }
 
-const ENCOUNTERS: { text: string; rationsDice?: number; ember?: number; goldLossDice?: number; lootBag?: boolean; losePotion?: boolean; loseLockpick?: boolean; diseaseChance?: number }[] = [
+const ENCOUNTERS: { text: string; rationsDice?: number; ember?: number; goldLossDice?: number; lootBag?: boolean; losePotion?: boolean; loseLockpick?: boolean; diseaseChance?: number; alertDays?: number }[] = [
   // Rations lost are rolled (1d8), not fixed, and folded into the text shown to the
   // player — see the rationsLost formatting in stepOverworld.
   { text: "Um bando de corvos assusta a coluna e parte das rações se perde na correria.", rationsDice: 8 },
@@ -280,8 +280,9 @@ const ENCOUNTERS: { text: string; rationsDice?: number; ember?: number; goldLoss
   // above) — getting drenched is its own, separate chance to fall sick, not a bigger
   // multiplier on the everyday one.
   { text: "Chuva forte atrasa a marcha, mas ninguém se machuca.", diseaseChance: 0.05 },
-  { text: "Pegadas grandes demais cruzam o caminho. O grupo segue mais alerta, sem parar." },
-  { text: "Cobradores mascarados surgem entre as árvores e levam uma parte da bolsa comum.", goldLossDice: 12 },
+  // Real resolution, not just atmosphere: whatever left these tracks is still out there —
+  // doubles BATTLE_ENCOUNTER_CHANCE for the next 3 travel days (see alertStreak/stepOverworld).
+  { text: "Pegadas grandes demais cruzam o caminho. O grupo segue mais alerta.", alertDays: 3 },
   { text: "Uma carroça atolada cede de vez; comida e mantimentos caem no barro.", rationsDice: 4 },
   { text: "Um frasco se solta durante a descida e se quebra nas pedras.", losePotion: true },
   { text: "Ladrões passam pelo acampamento durante a noite e levam uma gazua.", loseLockpick: true },
@@ -361,8 +362,18 @@ export function stepOverworld(save: SaveData, toCol: number, toRow: number, loca
   }
   const landedLocation = locationAt(locations, toCol, toRow);
   const roadIds = roadEncounterIds();
-  if (!event && !landedLocation && roadIds.length > 0 && Math.random() < BATTLE_ENCOUNTER_CHANCE) {
-    event = { kind: "battle", text: "", missionId: roadIds[Math.floor(Math.random() * roadIds.length)] };
+  // Doubled, not just flat-boosted, while the "large tracks" alert is active — same relative
+  // read on the odds regardless of what BATTLE_ENCOUNTER_CHANCE itself is tuned to later.
+  const battleChance = save.alertStreak > 0 ? BATTLE_ENCOUNTER_CHANCE * 2 : BATTLE_ENCOUNTER_CHANCE;
+  let alertStreak = Math.max(0, save.alertStreak - 1);
+  let lastRoadEncounterId = save.lastRoadEncounterId;
+  if (!event && !landedLocation && roadIds.length > 0 && Math.random() < battleChance) {
+    // Never the same road encounter twice in a row — drop last time's pick from the pool
+    // unless it's the only one there is, in which case a repeat is unavoidable.
+    const pool = roadIds.length > 1 ? roadIds.filter((id) => id !== save.lastRoadEncounterId) : roadIds;
+    const missionId = pool[Math.floor(Math.random() * pool.length)]!;
+    lastRoadEncounterId = missionId;
+    event = { kind: "battle", text: "", missionId };
   }
   if (!event && !landedLocation && Math.random() < TEXT_ENCOUNTER_CHANCE) {
     const pick = ENCOUNTERS[Math.floor(Math.random() * ENCOUNTERS.length)]!;
@@ -443,6 +454,7 @@ export function stepOverworld(save: SaveData, toCol: number, toRow: number, loca
           lostItem = "−1 Gazua";
         }
       }
+      if (pick.alertDays) alertStreak = pick.alertDays;
       event = {
         kind: "encounter",
         text: [
@@ -450,6 +462,7 @@ export function stepOverworld(save: SaveData, toCol: number, toRow: number, loca
           rationsLost > 0 ? `−${rationsLost} ${rationsLost === 1 ? "ração" : "rações"}` : "",
           goldLost > 0 ? `−${goldLost} Gold` : "",
           lostItem,
+          pick.alertDays ? `chance de emboscada dobrada por ${pick.alertDays} dias` : "",
         ].filter(Boolean).join(" · "),
       };
     }
@@ -474,6 +487,8 @@ export function stepOverworld(save: SaveData, toCol: number, toRow: number, loca
       rations: Math.max(0, rations + rationsDelta),
       ember: Math.max(0, save.ember + emberDelta),
       hungerStreak,
+      alertStreak,
+      lastRoadEncounterId,
       unitHp,
       weapons,
       looseEquipment,

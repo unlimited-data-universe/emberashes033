@@ -306,7 +306,7 @@ export function inRangeOf(ax: number, ay: number, unit: Unit, min: number, max: 
   return m >= min && m <= max;
 }
 
-function footprintCost(
+export function footprintCost(
   x: number,
   y: number,
   size: number,
@@ -318,15 +318,21 @@ function footprintCost(
   stop: boolean,
   overlay: DecorOverlay = EMPTY_OVERLAY,
 ): number | null {
-  // self's real shape, not a bare {x,y,size} — that would drop footprintOffsets/footprintW/
-  // footprintH entirely (they're not part of this literal), silently falling back to
-  // footprint()'s generic 2x4-rectangle default for every size>=4 creature. That default
-  // rectangle doesn't match the true silhouette the occupancy map (occ, built from each
-  // unit's own real footprint() call) was populated with, so a custom-shaped mover — Troll,
-  // Horror, Asherah, Ancient Golem, anything on FOOTPRINT_TYPE_7/8 — was checking the wrong
-  // cells for both terrain passability and collision, which reads as "randomly stuck" (some
-  // moves wrongly blocked, some real blockers wrongly missed) rather than a clean failure.
-  const cells = footprint({ x, y, size, footprintW: self.footprintW, footprintH: self.footprintH, footprintOffsets: self.footprintOffsets });
+  // Pathfinding and the footprint used for occupancy/targeting/rendering are NOT the same
+  // thing, per direct instruction — a mover with an explicit multi-row shape (Troll, Horror,
+  // Asherah, Ancient Golem, familiar3, anything on FOOTPRINT_TYPE_5/6/7/8) checks only its
+  // own front/lower row (footprintFrontRow — dy:0, the row closest to the player, where its
+  // feet actually render) for movement legality, not the trailing rows behind it. Those
+  // trailing rows run in one fixed board direction that never rotates with travel direction,
+  // so any anchor within that many rows of a map edge had every single neighbor rejected by
+  // a trailing cell running off the board — "reach" collapsed to just its own tile, a
+  // creature that could never move again for the rest of the mission. The trailing rows
+  // still matter everywhere else (occ below is still the real, full-footprint occupancy
+  // map that every OTHER unit's own footprint populated) — only this mover's own next-cell
+  // check is narrowed. A unit with no explicit shape (plain size 1, or the generic size>=4
+  // rectangle fallback) keeps checking its full footprint() as before; this only changes
+  // movement for the classes that actually have a real footprintOffsets shape.
+  const cells = self.footprintOffsets ? footprintFrontRow({ x, y, footprintOffsets: self.footprintOffsets }) : footprint({ x, y, size });
   let cost = 1;
   for (const p of cells) {
     if (!inBounds(p.x, p.y, cols, rows)) return null;
@@ -482,7 +488,7 @@ export function inWeaponRange(
   return m >= min && m <= max;
 }
 
-export function canHitFrom(unit: Unit, from: Point, foe: Unit, tiles: TerrainId[], cols: number, overlay: DecorOverlay = EMPTY_OVERLAY): boolean {
+export function canHitFrom(unit: Unit, from: Point, foe: Unit, tiles: TerrainId[], cols: number, overlay: DecorOverlay = EMPTY_OVERLAY, fullFootprint = false): boolean {
   const placed = { ...unit, x: from.x, y: from.y };
   const tile = tileAt(tiles, cols, from.x, from.y);
   const max = effectiveMaxRange(unit, tile);
@@ -494,7 +500,14 @@ export function canHitFrom(unit: Unit, from: Point, foe: Unit, tiles: TerrainId[
   // 2-3 tiles beyond the creature's real attack range, which tricked the AI into thinking
   // it was already in range and never queuing a move — the "large creatures don't move"
   // bug. Footprint is for occupancy/collision; targetable range is a front-row concept.
-  for (const p of footprintFrontRow(placed)) {
+  //
+  // A counter (see canCounter in combat.ts, the one caller that passes fullFootprint: true)
+  // isn't choosing where to stand — the defender already knows exactly who just hit it and
+  // from where, so restricting it to the front row too meant a big creature attacked from
+  // behind (any hex only adjacent to a trailing/back-row footprint cell, e.g. Familiar
+  // Titã's own dy:-1 row) landed the hit but could never swing back, since the front row
+  // never came within range of an attacker standing next to the back instead.
+  for (const p of fullFootprint ? footprint(placed) : footprintFrontRow(placed)) {
     if (inRangeOf(p.x, p.y, foe, unit.minRange, max)) {
       ok = true;
       break;

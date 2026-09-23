@@ -28,7 +28,7 @@ export interface Spells {
 export const TIER_KEYS = ["tier1", "tier2", "tier3", "tier4", "tier5", "tier6", "tier7", "tier8", "tier9", "tier10"] as const;
 export type TierKey = (typeof TIER_KEYS)[number];
 
-export type TerrainId = "plains" | "woods" | "ruins" | "water" | "ember" | "hill" | "flame" | "column" | "nave" | "barricade" | "highwood" | "highruin" | "chest" | "door" | "deadtree" | "void" | "snow";
+export type TerrainId = "plains" | "woods" | "ruins" | "water" | "ember" | "hill" | "flame" | "column" | "nave" | "barricade" | "door" | "void" | "snow";
 /** Which faction a unit fights for.
  *
  * "neutral" is the wild-beast side: it holds its ground (never enters the turn order, so it
@@ -54,6 +54,7 @@ export type ClassId =
   | "wardog"
   | "troll"
   | "morvenianWolf"
+  | "mordavianWolf"
   | "punisher"
   | "theButcher"
   | "birolho"
@@ -91,8 +92,12 @@ export type ClassId =
   // Stronger evolution of the same summon, cast once the conjurer has promoted (level 15+,
   // sorcerer/necromancer) — see castSummonFamiliar. Same "stats computed live, this is only
   // a fallback" deal as "familiar" above.
-  | "familiar2";
-export type SpriteId = "kael" | "neera" | "voss" | "salazar" | "aldric" | "malrec" | "defaultLancer" | "soldier" | "brigand" | "captain" | "sorcerer" | "horror" | "Asherah" | "pikeman" | "wardog" | "troll" | "morvenian-wolf" | "punisher" | "theButcher" | "birolho" | "birolho2" | "birolho3" | "familiar" | "familiar2" | "swamp-blue-calf" | "ancient-golem" | "lancer" | "sandoval" | "kaelFinal" | "kaelEarly" | "conjurer" | "cultist-v2"
+  | "familiar2"
+  // Conjurer tier 3 (Summon Familiar Titã, "the Big Guy"): a full-strength summon (100% of
+  // the conjurer's current attributes, not a fraction like familiar/familiar2) that can also
+  // cast its own Fireball a few times a battle — see familiarSpellCharges/Unit.spellCharges.
+  | "familiar3";
+export type SpriteId = "defaultWarrior" | "neera" | "voss" | "salazar" | "aldric" | "malrec" | "defaultLancer" | "soldier" | "brigand" | "captain" | "sorcerer" | "horror" | "Asherah" | "pikeman" | "wardog" | "troll" | "morvenian-wolf" | "mordavian-wolf" | "punisher" | "theButcher" | "birolho" | "birolho2" | "birolho3" | "familiar" | "familiar2" | "familiar3" | "swamp-blue-calf" | "ancient-golem" | "lancer" | "sandoval" | "kaelFinal" | "kaelEarly" | "conjurer" | "cultist-v2"
   // Generic-enemy "alter" sprites, split off so a plain Archer/Mage/Healer enemy (and their
   // own promotions) never renders as literally the same SpriteId as Neera/Voss/Salazar the
   // MCs — see HERO_SPRITE_BY_NAME/CLASSES in engine.ts/data.ts. Each starts as a straight
@@ -119,7 +124,10 @@ export type SpellKind =
   | "sweep"
   | "trip"
   | "summonFamiliar"
+  | "phantasmalForce"
   | "summonFamiliar2"
+  | "summonFamiliar3"
+  | "lifeDrain"
   | "webOfDreams"
   | "multiShot"
   | "secondWind"
@@ -232,6 +240,14 @@ export interface Spawn {
    * Meant for neutral-side spawns — a neutral with no dialog stays the existing wild-beast
    * behavior, unchanged. */
   dialog?: DialogTree;
+  /** Editor/test escape hatch from HERO_SPRITE_BY_NAME (engine.ts): one of the six named
+   * heroes normally always renders with their own pinned sprite no matter what classId they
+   * carry, so a promoted hero never visually turns into the stock enemy art their new class
+   * shares with real enemies. Setting this on a player-side spawn bypasses that pin for this
+   * spawn only, rendering with classId's own class sprite instead — lets the mission editor
+   * drop any enemy/creature classId into a hero-named slot and actually see it, for testing.
+   * No effect on any other spawn (only the six HERO_SPRITE_BY_NAME names are ever pinned). */
+  useClassSprite?: boolean;
 }
 
 export type WinCondition = "rout" | "boss";
@@ -250,8 +266,8 @@ export interface DecorationDef {
    *
    * Decorations are art: every rule — whether a hex can be walked, shot through or stood
    * on top of — comes from the tile underneath, which is why the rocks that rockifyColumns
-   * draws leave their column tile in place. A house you can climb is a house prop sitting
-   * on "highruin". Naming it here lets the editor lay the tile with the prop, so the
+   * draws leave their column tile in place. A ridge you can climb is a mountain-ridge prop
+   * sitting on "hill". Naming it here lets the editor lay the tile with the prop, so the
    * picture and the rules cannot drift apart. */
   tile?: TerrainId;
   /** Draw this prop after character sprites so near-side scenery can naturally occlude
@@ -339,6 +355,59 @@ export interface Mission {
    * every mission shipped before fog existed plays exactly as it always did — the
    * flag is for dungeon levels built around not seeing what is coming. */
   fog?: boolean;
+  /** "indoor" softens the sun to a flat ambient wash (no strong directional shadows) — for
+   * missions set inside buildings/dungeons where a raking outdoor sun makes no sense. Missions
+   * without this set play "outdoor" (today's default look), so nothing shipped changes. */
+  environment?: "outdoor" | "indoor";
+  /** DirectionalLight ("sun") intensity override, for the Three renderer only. Undefined uses
+   * the renderer's own default. Author-tunable per mission because "how strong should the light
+   * and its shadows read" turned out to need a per-map answer, not one global constant. */
+  sunIntensity?: number;
+  /** HemisphereLight (sky/ground fill) intensity override, same reasoning as sunIntensity —
+   * undefined uses the renderer's own default. */
+  ambientIntensity?: number;
+  /** Ground-mist peak opacity, Three renderer only (see ThreeAtmosphere.ts) — undefined or 0
+   * means no mist at all, which is every mission shipped before this existed. Deliberately not
+   * exposed above a modest ceiling in the editor (see GameApp.tsx's slider max) — a real,
+   * author-controlled value now, not a hardcoded per-mission-id table. */
+  mistIntensity?: number;
+  /** Which mist implementation this mission uses:
+   *  - "mist2" (default): real Three.js world-space planes using a smooth pre-baked noise
+   *    texture, spread across the whole battlefield (see ThreeAtmosphere.ts's GroundMist).
+   *  - "mist3": the earlier real Three.js world-space InstancedMesh "puff" implementation
+   *    (large soft drifting circles) — kept available as its own selectable option, not
+   *    deleted, per direct instruction (see ThreeAtmosphere.ts's GroundMistPuffs).
+   *  - "vignette": a screen-space haze concentrated at the four corners only, center always
+   *    clear (see BattleCanvas.tsx's corner-vignette CSS div, extended to read
+   *    mistIntensity/mistColor when this is set).
+   *  - "vignette2": a deeper, layered version of the screen-space vignette, with independently
+   *    drifting fog banks and a broad, feathered clear area at the center.
+   *  - "vignette3": low, directional ground fog crossing the battlefield in pale rolling bands;
+   *    deliberately no dark corner vignette or texture reuse.
+   *  - "vignette4": a supplied monochrome edge-fog plate, animated as one screen layer.
+   * Undefined defaults to "mist2", so nothing shipped changes by default. */
+  mistType?: "mist2" | "mist3" | "mist4" | "vignette" | "vignette2" | "vignette3" | "vignette4";
+  /** Bloom strength for the Three renderer's post-processing pass (UnrealBloomPass) — real bright-
+   * surface glow (sun-lit highlights, additive wisp particles), not a fake overlay. Undefined
+   * uses the renderer's own conservative default. Author-tunable per mission like every other
+   * atmosphere control tonight, full range including deliberately extreme at max. */
+  bloomIntensity?: number;
+  /** Speed multiplier for the mist's drift — 1.0 is the renderer's own default pace, same
+   * reasoning as wispSpeed: never needs a code change to retune again. */
+  mistSpeed?: number;
+  /** 0-1 dial for the rising-ember "wisp" particle count, Three renderer only (see
+   * ThreeAtmosphere.ts) — 0 or undefined means none, every mission shipped before this existed.
+   * A dial, not a raw instance count, so the editor slider stays meaningful regardless of how
+   * the renderer scales it internally. */
+  wispIntensity?: number;
+  /** Speed multiplier for the wisp rise/drift/fade cycle — 1.0 is the renderer's own default
+   * pace, lower is slower, higher is faster. Author-controlled so "how fast should this feel"
+   * never needs a code change again. */
+  wispSpeed?: number;
+  /** Fixed wisp color (0xRRGGBB) — no automatic mixing toward the sun/ambient light color, on
+   * direct instruction: the author picks the exact color, full stop. Undefined uses the
+   * renderer's own default (a warm ember orange). */
+  wispColor?: number;
   /** Which art variant to use per tile, row-major, same indexing as layout flattened.
    * Missing/undefined index or omitted array entirely means variant 0 (the default) —
    * existing missions never set this and keep rendering exactly as before. */
@@ -405,6 +474,11 @@ export interface Unit {
   role: string;
   side: Side;
   sprite: SpriteId;
+  /** Carries Spawn.useClassSprite through so a resumed battle re-derives the same sprite
+   * choice on load (see HERO_SPRITE_BY_NAME/resolveHeroSprite in engine.ts) instead of
+   * silently reverting to the name-pinned one. Irrelevant for any unit whose name isn't one
+   * of the six pinned hero names. */
+  useClassSprite?: boolean;
   x: number;
   y: number;
   hp: number;
@@ -426,6 +500,12 @@ export interface Unit {
   acted: boolean;
   facing: 1 | -1;
   walkPose: "front" | "back" | "side";
+  /** Flips at the start of every one of this unit's own turns (see beginUnitTurn). Consulted
+   * by sprites with a second idle loop (currently just Malrec, see idles2 in GameArt) to
+   * alternate between their two standing animations, and separately by sprites with a second
+   * attack cut (currently just Familiar 3, see attacks2 in GameArt) to alternate their swing —
+   * everyone else's render code ignores it. */
+  idleAlt: boolean;
   alive: boolean;
   drawX: number;
   drawY: number;
@@ -459,6 +539,20 @@ export interface Unit {
   /** Enemy-only Choque charges (weaker Relâmpago). Not a player tier — see shockChargesFor.
    * Distinct from `shock` above, which is Relâmpago's echo DoT. */
   shockCharges: number;
+  /** A summoned familiar's own spell charges this battle — which spell (if any) is FAMILIAR_SPELL[classId];
+   * set at summon time from familiarSpellCharges(conjurer's level), spent by that spell's own
+   * castX, never refilled mid-battle. Undefined/0 for every other unit. */
+  spellCharges?: number;
+  /** Familiar Maior's (tier 2) own Dreno de Vida charges this battle — independent of
+   * spellCharges above, since tier 2 is the one familiar tier with two own spells (Magic
+   * Missile via spellCharges, Life Drain via this) — set at summon time from
+   * familiarLifeDrainCharges(conjurer's level), spent by castLifeDrain, never refilled
+   * mid-battle. Undefined/0 for every other unit. */
+  lifeDrainCharges?: number;
+  /** A summoned familiar's own summoning conjurer, by id — set once at summon time. Consulted
+   * by Familiar Maior's Dreno de Vida to know who to heal (see the lifeDrain branch in
+   * BattleEngine.stepSpell); undefined for every non-familiar unit. */
+  summonerId?: string;
   diseased: boolean;
   diseaseBase: { atk: number; mag: number; def: number; res: number; mov: number } | null;
   /** Caustic Venom residue: 1D4 damage at the start of every one of this unit's own turns
@@ -562,6 +656,10 @@ export interface UnitPublic {
   crippled: boolean;
   offHandId: string | null;
   summoned: boolean;
+  /** A summoned familiar's own spell charges — see the matching field on Unit. */
+  spellCharges?: number;
+  /** Familiar Maior's own Dreno de Vida charges — see the matching field on Unit. */
+  lifeDrainCharges?: number;
   asleep: boolean;
   /** True while this unit's current cell sits inside an active Web of Dreams zone — purely a
    * display flag; the movement penalty it implies is computed live off the zone, not stored. */
@@ -740,6 +838,10 @@ export interface GameArt {
   decorations: Record<string, HTMLImageElement>;
   sprites: Record<SpriteId, HTMLImageElement[]>;
   attacks: Partial<Record<SpriteId, HTMLImageElement[]>>;
+  /** A second, distinct attack cut for the few sprites that have one (currently just Familiar
+   * 3) — Unit.idleAlt (the same flip Malrec's idles2 uses, see its doc comment) picks between
+   * this and the sprite's regular `attacks` pool, alternating turn to turn. */
+  attacks2: Partial<Record<SpriteId, HTMLImageElement[]>>;
   /** A distinct pose for casting a spell, for the few sprites that have one cut — falls back
    * to `attacks` (the melee swing) for every sprite without one, same as it always did. */
   casts: Partial<Record<SpriteId, HTMLImageElement[]>>;
@@ -764,6 +866,10 @@ export interface GameArt {
    * regular flip) for every sprite without one. */
   countersLeft: Partial<Record<SpriteId, HTMLImageElement[]>>;
   idles: Partial<Record<SpriteId, HTMLImageElement[]>>;
+  /** A second, distinct standing loop for the few sprites that have one (currently just
+   * Malrec) — Unit.idleAlt picks between this and the sprite's regular idle/`sprites` pool,
+   * flipping once per that unit's own turn so it visibly alternates stance turn to turn. */
+  idles2: Partial<Record<SpriteId, HTMLImageElement[]>>;
   walkDirs: Partial<Record<SpriteId, WalkDirs>>;
   impact: HTMLImageElement[];
   /** Ultra-realistic Fireball core; its trail and light remain procedural. */
@@ -774,6 +880,11 @@ export interface GameArt {
   arrowCore: HTMLCanvasElement;
   /** Photoreal Relâmpago cores (flicker set). Additive-blend on black. */
   lightningCores: HTMLImageElement[];
+  /** Real alpha-cutout spiderweb photo, stamped once per hex a live Web of Dreams zone
+   * covers (see renderGround's web-zone loop) — replaces the old procedural WebGL "web"
+   * shader quad, which read as an odd glowing patch layered on top of the movement-range
+   * highlight instead of a physical web sitting on the ground. */
+  webfloor: HTMLImageElement;
   /** Optional full-canvas backdrop, keyed by mission id. */
   backdrops: Record<string, HTMLImageElement>;
 }
@@ -829,6 +940,9 @@ export interface BattleUnitSnap {
   sleepTurns: number;
   guaranteedDrop: boolean;
   dialog: DialogTree | null;
+  /** Carries Spawn.useClassSprite through a save/resume round-trip — see its doc comment.
+   * Optional for compatibility with battle saves made before this existed. */
+  useClassSprite?: boolean;
   moveBudgetUsed: number;
 }
 
@@ -848,7 +962,12 @@ export interface BattleSnapshot {
   lootWeapons: string[];
   lootEquipment: string[];
   ownedWeapons: string[];
-  webZones: { cells: string[]; roundsLeft: number }[];
+  /** center/radius optional for compatibility with battle saves made before Dreaming Web's
+   * floor patch became one zone-wide WebGL effect instead of a per-hex stamp — a zone
+   * resumed from an older save without them just renders no web patch until it's re-cast
+   * (see BattleCanvas), same graceful-degradation approach as every other optional field
+   * here. */
+  webZones: { cells: string[]; roundsLeft: number; center?: Point; radius?: number; sleepChance?: number }[];
   auraZones: { cells: string[]; roundsLeft: number; kind: "protection" | "intimidation"; side: Side; pct: number }[];
   log: string[];
   winAvailable: boolean;
@@ -931,6 +1050,15 @@ export interface SaveData {
    * status once past the 3-day grace period — see hungerPenaltyFor in overworld.ts.
    * Resets to 0 the moment rations flow again or the party reaches an Inn. */
   hungerStreak: number;
+  /** Days left of doubled battle-encounter odds on the road, set by the "large tracks cross
+   * the path" event (see BATTLE_ENCOUNTER_CHANCE/stepOverworld in overworld.ts) — something
+   * really is out there, whether or not it's crossed your path yet. Decrements by one every
+   * travel day, 0 = normal odds. */
+  alertStreak: number;
+  /** The road encounter's mission id from the last time one triggered — excluded from the
+   * very next pick (see roadEncounterIds/stepOverworld in overworld.ts) so the same fight
+   * never repeats twice in a row. null before the first one ever fires. */
+  lastRoadEncounterId: string | null;
 }
 
 export interface SaveBank {

@@ -188,7 +188,7 @@ export function isMuted(): boolean {
 }
 
 function beep(freq: number, dur: number, type: OscillatorType, gain = 0.22, slide = 0): void {
-  if (muted) return;
+  if (muted || fileSfxPlaying()) return;
   const c = ac();
   if (!c || c.state !== "running") {
     playHtml(wavTone(freq, dur, Math.min(0.9, gain * 2.4), type === "square" ? "square" : "sine"), Math.min(1, gain * 3));
@@ -211,8 +211,11 @@ function beep(freq: number, dur: number, type: OscillatorType, gain = 0.22, slid
   osc.stop(t0 + dur + 0.02);
 }
 
+/** Temporary stand-in for "hit" only, restored on request as a placeholder until a real
+ * recording replaces it — remove this and hit's noise()/beep() calls together once that
+ * file lands (see the sfxPlay.hit comment below). */
 function noise(dur: number, gain = 0.22): void {
-  if (muted) return;
+  if (muted || fileSfxPlaying()) return;
   const c = ac();
   if (!c || c.state !== "running") {
     playHtml(wavTone(180, dur, Math.min(0.8, gain * 2), "noise"), Math.min(1, gain * 2.5));
@@ -239,6 +242,21 @@ function noise(dur: number, gain = 0.22): void {
   src.stop(t0 + dur + 0.02);
 }
 
+/** Whether a real sound-effect file (from playSfxFile/playSfxFileExclusive) is currently meant
+ * to be audible, so beep()/noise() below can hold off rather than layer a synthesised chip-tune
+ * bleep under a real recording — the two timbres clash badly when they land on top of each
+ * other (reported directly: a spell's cast mp3 and the generic "hit" bleep landing on the same
+ * beat). This used to be inferred from each element's own .paused/.ended state, but that reads
+ * as "not yet playing" for a brief window right after .play() is called (the browser hasn't
+ * actually started producing audio yet), which is exactly when a same-tick follow-up call like
+ * stepSpell's sfxPlay.hit() right after sfxPlay.spell() would slip through. Tracking intent
+ * explicitly — flagged the instant we ask an element to play, cleared only once it actually
+ * stops — removes that race entirely. */
+const activeFileSfxEls = new Set<HTMLAudioElement>();
+function fileSfxPlaying(): boolean {
+  return activeFileSfxEls.size > 0;
+}
+
 /** One-shot effect from a file in public/game/MUSIC/SoundFX, layered over whatever music or
  * synthesised beep is already playing rather than replacing it — unlike playFile, this never
  * touches the theme/track elements, so it can't interrupt them. A fresh Audio() per call: the
@@ -247,142 +265,92 @@ function playSfxFile(file: string, volume = 0.55): void {
   if (muted || typeof Audio === "undefined") return;
   const el = new Audio(`/game/MUSIC/SoundFX/${file}`);
   el.volume = volume * sfxVolume;
-  el.play().catch(() => {});
+  activeFileSfxEls.add(el);
+  const done = () => activeFileSfxEls.delete(el);
+  el.addEventListener("ended", done, { once: true });
+  el.addEventListener("error", done, { once: true });
+  el.play().catch(done);
 }
 
+/** One persistent element per file, reused instead of a fresh Audio() per call. A retrigger
+ * while the previous play is still going seeks back to 0 and restarts it rather than layering
+ * a second copy on top — so a generic cue fired several times in quick succession (a flurry of
+ * basic attacks, a multi-target skill) never stacks into a buzzing chord of itself. Only worth
+ * it for a cue reused across many different actions (the shared attack/cast bleeps below); a
+ * one-off cue tied to a single distinct moment (LevelUp, Cultist V2's own cuts) has nothing to
+ * overlap with itself and keeps using playSfxFile's layered fresh-Audio() behavior. */
+const exclusiveSfxEls = new Map<string, HTMLAudioElement>();
+function playSfxFileExclusive(file: string, volume = 0.55): void {
+  if (muted || typeof Audio === "undefined") return;
+  let el = exclusiveSfxEls.get(file);
+  if (!el) {
+    el = new Audio(`/game/MUSIC/SoundFX/${file}`);
+    exclusiveSfxEls.set(file, el);
+    const captured = el;
+    const done = () => activeFileSfxEls.delete(captured);
+    captured.addEventListener("ended", done);
+    captured.addEventListener("pause", done);
+    captured.addEventListener("error", done);
+  }
+  el.volume = volume * sfxVolume;
+  el.currentTime = 0;
+  activeFileSfxEls.add(el);
+  el.play().catch(() => activeFileSfxEls.delete(el));
+}
+
+// Every synthesised chip-tune "bleep" cue (beep()-based) has been silenced per direct report —
+// arrowAttack is the sole named exception, kept as a legit sound. Each entry below is
+// left as a no-op rather than deleted so every existing call site across engine.ts/GameApp.tsx/
+// OverworldMapScreen.tsx/WorldMapScreen.tsx/InnScreen.tsx keeps working untouched; a cue backed
+// by a real recording (spell, meleeAttack, the Cultist V2 set, heal, thrust/sweep/trip, levelUp)
+// is unaffected, since those were never bleeps.
 export const sfxPlay = {
-  // Each common game event uses a short layered cue rather than a single UI beep.
-  // These are deliberately compact: combat stays readable even during multi-target actions.
-  select: () => {
-    beep(430, 0.09, "triangle", 0.13, 86);
-    setTimeout(() => beep(690, 0.1, "sine", 0.1, 44), 28);
-  },
-  move: () => {
-    noise(0.055, 0.07);
-    beep(136, 0.11, "sine", 0.11, -36);
-  },
-  ui: () => {
-    beep(560, 0.075, "triangle", 0.11, 112);
-    setTimeout(() => beep(812, 0.065, "sine", 0.075, 42), 20);
-  },
-  purchase: () => {
-    // Three short metallic drops: unmistakably coins, restrained enough for repeated buys.
-    beep(1180, 0.055, "square", 0.08, -210);
-    setTimeout(() => beep(940, 0.07, "triangle", 0.11, -150), 45);
-    setTimeout(() => beep(1320, 0.11, "sine", 0.12, -180), 105);
-  },
+  select: () => {},
+  move: () => {},
+  ui: () => {},
+  purchase: () => {},
+  // Temporary placeholder, restored on request until a real recording replaces it — remove
+  // this (and noise()'s only remaining call site above) the moment that file lands.
   hit: () => {
     noise(0.12, 0.26);
     beep(122, 0.16, "sawtooth", 0.2, -70);
     setTimeout(() => beep(310, 0.06, "square", 0.075, -120), 12);
   },
-  crit: () => {
-    noise(0.16, 0.34);
-    beep(104, 0.22, "sawtooth", 0.22, -60);
-    setTimeout(() => beep(424, 0.13, "square", 0.16, 118), 22);
-    setTimeout(() => beep(638, 0.15, "triangle", 0.11, 94), 58);
-  },
-  death: () => {
-    noise(0.24, 0.18);
-    beep(126, 0.52, "sawtooth", 0.21, -88);
-    setTimeout(() => beep(68, 0.42, "sine", 0.15, -22), 105);
-  },
-  turn: () => {
-    beep(246, 0.15, "triangle", 0.12, 140);
-    setTimeout(() => beep(494, 0.12, "sine", 0.1, 80), 65);
-  },
-  win: () => {
-    beep(262, 0.16, "sine", 0.13, 96);
-    setTimeout(() => beep(392, 0.2, "triangle", 0.17, 70), 90);
-    setTimeout(() => beep(523, 0.24, "triangle", 0.18, 92), 186);
-    setTimeout(() => beep(784, 0.46, "sine", 0.16, 64), 280);
-  },
-  lose: () => {
-    noise(0.18, 0.13);
-    beep(196, 0.56, "sine", 0.2, -126);
-    setTimeout(() => beep(98, 0.44, "sawtooth", 0.14, -46), 120);
-  },
-  spell: () => {
-    beep(246, 0.2, "sine", 0.12, 188);
-    setTimeout(() => beep(492, 0.2, "triangle", 0.15, 208), 42);
-    setTimeout(() => beep(738, 0.16, "sine", 0.1, 122), 84);
-  },
-  /** Soft, uncanny thread-and-dream sound for Web of Dreams. Kept procedural so it works
-   * without loading a new file and remains under the existing SFX mute control. */
-  dreamingWeb: () => {
-    noise(0.34, 0.14);
-    beep(312, 0.42, "sine", 0.19, -118);
-    setTimeout(() => beep(466, 0.24, "triangle", 0.16, -86), 72);
-    setTimeout(() => beep(622, 0.3, "sine", 0.12, -164), 146);
-  },
-  /** Summon Familiar's conjuring circle: a low swirling whoosh as the portal opens, rising
-   * into a bright chime right as the familiar steps through (see BattleEngine.emitPortalFx). */
-  summonFamiliar: () => {
-    noise(0.3, 0.1);
-    beep(180, 0.35, "sine", 0.14, 260);
-    setTimeout(() => beep(300, 0.3, "triangle", 0.13, 180), 90);
-    setTimeout(() => beep(560, 0.18, "sine", 0.15, 60), 260);
-    setTimeout(() => beep(840, 0.22, "triangle", 0.12, 40), 320);
-  },
-  meleeAttack: () => {
-    noise(0.075, 0.2);
-    beep(176, 0.12, "sawtooth", 0.19, 138);
-  },
+  crit: () => {},
+  death: () => {},
+  turn: () => {},
+  win: () => {},
+  lose: () => {},
+  spell: () => playSfxFileExclusive("Spellcast01.mp3", 0.55),
+  dreamingWeb: () => {},
+  summonFamiliar: () => {},
+  // meleeAttack (stepCombat's basic melee lunge) and thrust/sweep/trip (a physical skill's
+  // own activation cue) share ATT01Blunt.mp3 — a real recording, not a bleep. spell and heal
+  // (stepSpell's cast cue, magic or physical-skill alike) share Spellcast01.mp3 the same way.
+  // playSfxFileExclusive keeps repeats of either file from stacking into a buzz when several
+  // fire in quick succession.
+  meleeAttack: () => playSfxFileExclusive("ATT01Blunt.mp3", 0.55),
   // Cultist V2's own authored cues (see attachments/Cultist-V2), one per animation set —
-  // played instead of the generic magicAttack/spell/move beeps whenever the acting unit's
-  // sprite is "cultist-v2" (see stepCombat/stepSpell/startSeq in engine.ts).
+  // played instead of the (now silent) generic attack/cast/move cues whenever the acting
+  // unit's sprite is "cultist-v2" (see stepCombat/stepSpell/startSeq in engine.ts).
   cultistV2Attack: () => playSfxFile("CultistV2Attack.mp3", 0.55),
   cultistV2Spellcast: () => playSfxFile("CultistV2Spellcast.mp3", 0.55),
   cultistV2WalkLeft: () => playSfxFile("CultistV2WalkLeft.mp3", 0.45),
   cultistV2WalkRight: () => playSfxFile("CultistV2WalkRight.mp3", 0.45),
+  // The one bleep kept by direct request — a legit sound.
   arrowAttack: () => {
     beep(740, 0.055, "triangle", 0.17, -250);
     setTimeout(() => beep(260, 0.11, "sine", 0.12, -92), 18);
   },
-  magicAttack: () => {
-    beep(286, 0.18, "sine", 0.18, 240);
-    setTimeout(() => beep(568, 0.16, "triangle", 0.14, 122), 34);
-  },
-  heal: () => {
-    beep(392, 0.16, "sine", 0.12, 88);
-    setTimeout(() => beep(587, 0.2, "triangle", 0.15, 104), 62);
-    setTimeout(() => beep(880, 0.3, "sine", 0.12, 66), 126);
-  },
-  stun: () => {
-    noise(0.1, 0.24);
-    beep(194, 0.27, "square", 0.19, -142);
-    setTimeout(() => beep(82, 0.22, "sawtooth", 0.14, -32), 48);
-  },
-  miss: () => {
-    beep(498, 0.12, "sine", 0.12, -230);
-    setTimeout(() => beep(246, 0.1, "triangle", 0.08, -70), 42);
-  },
-  chest: () => {
-    noise(0.07, 0.11);
-    beep(318, 0.08, "square", 0.13, 120);
-    setTimeout(() => beep(706, 0.09, "triangle", 0.15, 128), 58);
-    setTimeout(() => beep(1014, 0.16, "sine", 0.12, 88), 120);
-  },
-  loot: () => {
-    beep(620, 0.08, "triangle", 0.13, 136);
-    setTimeout(() => beep(932, 0.11, "sine", 0.15, 110), 46);
-    setTimeout(() => beep(1244, 0.15, "triangle", 0.11, 74), 98);
-  },
-  thrust: () => {
-    noise(0.07, 0.18);
-    beep(176, 0.13, "sawtooth", 0.17, 220);
-    setTimeout(() => beep(388, 0.08, "triangle", 0.1, 145), 24);
-  },
-  sweep: () => {
-    noise(0.14, 0.2);
-    beep(148, 0.22, "sawtooth", 0.18, 178);
-    setTimeout(() => beep(334, 0.14, "triangle", 0.1, 116), 54);
-  },
-  trip: () => {
-    noise(0.13, 0.26);
-    beep(164, 0.23, "square", 0.19, -152);
-    setTimeout(() => beep(84, 0.28, "sawtooth", 0.16, -52), 66);
-  },
+  magicAttack: () => {},
+  heal: () => playSfxFileExclusive("Spellcast01.mp3", 0.55),
+  stun: () => {},
+  miss: () => {},
+  chest: () => {},
+  loot: () => {},
+  thrust: () => playSfxFileExclusive("ATT01Blunt.mp3", 0.55),
+  sweep: () => playSfxFileExclusive("ATT01Blunt.mp3", 0.55),
+  trip: () => playSfxFileExclusive("ATT01Blunt.mp3", 0.55),
   levelUp: () => playSfxFile("LevelUp.mp3", 0.6),
 };
 
